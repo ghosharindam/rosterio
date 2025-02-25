@@ -12,16 +12,20 @@ function onOpen() {
 
 // Constants for sheet names
 const SHEET_NAMES = {
-  TEACHER_SUBJECTS: 'Teacher-Subject-Standard',
+  CONFIG: 'Configuration',
+  ROSTER: 'Generated-Roster',
+  TEACHER_SUBJECTS: 'Teacher-Subjects',
   PERIODS_CONFIG: 'Periods-Configuration',
-  CLASS_CONFIG: 'Standard-Section',
-  SUBJECT_PERIODS: 'Standard-Subject-Periods',
-  ROSTER: 'Generated-Roster'
+  CLASS_CONFIG: 'Class-Configuration',
+  SUBJECT_PERIODS: 'Subject-Periods'
 };
 
 // Initialize all required sheets
 function initializeSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Create Configuration sheet
+  // createConfigSheet(ss);
   
   // Create Teacher-Subject-Standard sheet
   createTeacherSubjectSheet(ss);
@@ -112,8 +116,7 @@ function createPeriodsConfigSheet(ss) {
     ['School End Time', '3:00 PM'],
     ['Period Duration (minutes)', '45'],
     ['Break Duration (minutes)', '15'],
-    ['Lunch Duration (minutes)', '30'],
-    ['Number of Periods per Day', '8']
+    ['Lunch Duration (minutes)', '30']
   ];
   
   sheet.getRange(1, 1, config.length, 2).setValues(config);
@@ -194,4 +197,4 @@ function testValidations() {
   validateSubjectDistribution();
   
   Logger.log('Validation tests completed');
-} 
+}

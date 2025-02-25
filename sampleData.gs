@@ -45,7 +45,7 @@ const SAMPLE_DATA = {
     ['Period Duration (minutes)', '45'],
     ['Break Duration (minutes)', '15'],
     ['Lunch Duration (minutes)', '30'],
-    ['Number of Periods per Day', '8']
+    ['Number of Periods', '8']
   ],
   
   classConfig: [
