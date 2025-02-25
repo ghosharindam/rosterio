@@ -82,4 +82,18 @@ function createRosterSheet(ss) {
   
   // This will be populated when generating the roster
   sheet.getRange(1, 1).setValue('Roster will be generated here');
+}
+
+function initializeSheets() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Create all required sheets
+  createTeacherSubjectSheet(ss);
+  createPeriodsConfigSheet(ss);
+  createClassConfigSheet(ss);
+  createSubjectPeriodsSheet(ss);
+  createRosterSheet(ss);
+  
+  // Create the on-edit trigger
+  createOnEditTrigger();
 } 
