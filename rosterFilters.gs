@@ -1,5 +1,8 @@
 // Add filter controls to the roster sheet
 function addRosterFilters(sheet) {
+  // Delete all existing triggers first
+  deleteAllTriggers();
+  
   // First, create or get the hidden sheet for storing original data
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let originalDataSheet = ss.getSheetByName('_OriginalRosterData');
@@ -55,8 +58,12 @@ function addRosterFilters(sheet) {
   sheet.getRange('A1:H1').setBackground('#e3f2fd');
   sheet.getRange('A1:H1').setFontWeight('bold');
   
-  // Add onEdit trigger for filter changes
+  // Set up Teacher-View sheet
+  setupTeacherView();
+  
+  // Add onEdit triggers
   createFilterTrigger();
+  createTeacherViewTrigger();
 }
 
 // Get unique teachers from the roster
@@ -166,7 +173,11 @@ function applyRosterFilters(sheet) {
   // Update visible sheet with filtered data (starting from row 2, after filter row)
   sheet.getRange(2, 1, filteredData.length, filteredData[0].length)
        .setValues(filteredData);
+  
+  // After applying filters, update the conflict highlighting
+  checkTeacherConflicts();
 }
+
 
 // Update original data when roster is regenerated or manually edited
 function updateOriginalData(sheet) {
@@ -181,6 +192,14 @@ function updateOriginalData(sheet) {
   const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
   originalDataSheet.clear();
   originalDataSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+}
+
+// Delete all existing triggers
+function deleteAllTriggers() {
+  const allTriggers = ScriptApp.getProjectTriggers();
+  allTriggers.forEach(trigger => {
+    ScriptApp.deleteTrigger(trigger);
+  });
 }
 
 // Create trigger for filter changes
@@ -199,6 +218,27 @@ function onFilterEdit(e) {
     const range = e.range;
     if (range.getRow() === 1 && (range.getColumn() === 4 || range.getColumn() === 6 || range.getColumn() === 8)) {
       applyRosterFilters(sheet);
+    }
+  }
+}
+
+// Create trigger for teacher view changes
+function createTeacherViewTrigger() {
+  const ss = SpreadsheetApp.getActive();
+  ScriptApp.newTrigger('onTeacherViewEdit')
+           .forSpreadsheet(ss)
+           .onEdit()
+           .create();
+}
+
+// Handle teacher selection change
+function onTeacherViewEdit(e) {
+  const sheet = e.source.getActiveSheet();
+  if (sheet.getName() === 'Teacher-View') {
+    const range = e.range;
+    if ((range.getRow() === 1 && range.getColumn() === 2) || // Teacher selection
+        (range.getRow() === 1 && range.getColumn() === 4)) { // Subject filter
+      updateTeacherView();
     }
   }
 }
