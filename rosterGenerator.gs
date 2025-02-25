@@ -6,83 +6,65 @@ function generateRoster() {
     const classes = loadClassConfig();
     const subjectPeriods = loadSubjectPeriods();
     
-    // Create empty roster template
-    const sheet = createEmptyRoster(classes, periodsConfig);
-    
-    // Define break and lunch columns (1-based column indices)
-    const BREAK_COLUMN = 7;  // Column G
-    const LUNCH_COLUMN = 10; // Column J
-    
-    // Get number of periods from configuration
-    const totalPeriods = periodsConfig.periodsPerDay;
+    // Create empty roster template and get sheet info
+    const { sheet, totalColumns, breakColumn, lunchColumn } = createEmptyRoster(classes, periodsConfig);
     
     // Prepare data array for batch update
-    const numRows = classes.length * 5; // 5 days per class
-    const numCols = 12; // Total columns including class, day, and all periods
+    const numRows = classes.length * Object.keys(periodsConfig.dayTimings).length;
     const rosterData = [];
     
-    // For each class
+    // Generate roster data
     classes.forEach((cls, classIndex) => {
-      const standard = cls.standard;
-      const subjects = subjectPeriods[standard] || {};
-      
-      // Get available teachers for this standard
-      const availableTeachers = teachers.filter(teacher => 
-        teacher.standards[standard] === true
-      );
-      
-      // For each day (5 days)
-      ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'].forEach(day => {
-        // Create a row with empty strings
-        const rowData = new Array(numCols).fill('');
-        
-        // Set class and day (columns A and B)
-        rowData[0] = `${cls.standard}-${cls.section}`;
-        rowData[1] = day;
-        
-        // Set break and lunch (columns G and J)
-        rowData[6] = 'BREAK';  // Column G (index 6)
-        rowData[9] = 'LUNCH';  // Column J (index 9)
-        
-        // Fill in periods (starting from column C)
-        for (let period = 0; period < totalPeriods; period++) {
-          // Calculate the actual column index in the array (0-based)
-          let colIndex = period + 2;  // Start from column C (index 2)
+      Object.keys(periodsConfig.dayTimings).forEach(day => {
+        if (periodsConfig.dayTimings[day].isActive !== false) {
+          const rowData = new Array(totalColumns).fill('');
+          rowData[0] = `${cls.standard}-${cls.section}`;
+          rowData[1] = day;
           
-          // Adjust column index for break and lunch
-          if (period >= 4) colIndex++; // After break
-          if (period >= 6) colIndex++; // After lunch
-          
-          // Skip if this would be a break or lunch column
-          if (colIndex === 6 || colIndex === 9) continue; // Skip G and J
-          
-          // Randomly select a subject and teacher
-          const availableSubjects = Object.keys(subjects);
-          if (availableSubjects.length > 0) {
-            const randomSubject = availableSubjects[Math.floor(Math.random() * availableSubjects.length)];
-            const teachersForSubject = availableTeachers.filter(t => t.subject === randomSubject);
-            
-            if (teachersForSubject.length > 0) {
-              const randomTeacher = teachersForSubject[Math.floor(Math.random() * teachersForSubject.length)];
-              rowData[colIndex] = `${randomSubject}\n(${randomTeacher.name})`;
+          // Fill in periods
+          for (let col = 2; col < totalColumns; col++) {
+            if (col === breakColumn - 1) {
+              rowData[col] = 'BREAK';
+            } else if (col === lunchColumn - 1) {
+              rowData[col] = 'LUNCH';
+            } else {
+              // Add subject and teacher assignment
+              const standard = cls.standard;
+              const subjects = subjectPeriods[standard] || {};
+              const availableSubjects = Object.keys(subjects);
+              
+              if (availableSubjects.length > 0) {
+                const randomSubject = availableSubjects[Math.floor(Math.random() * availableSubjects.length)];
+                const teachersForSubject = teachers.filter(t => 
+                  t.standards[standard] === true && t.subject === randomSubject
+                );
+                
+                if (teachersForSubject.length > 0) {
+                  const randomTeacher = teachersForSubject[Math.floor(Math.random() * teachersForSubject.length)];
+                  rowData[col] = `${randomSubject}\n(${randomTeacher.name})`;
+                }
+              }
             }
           }
+          
+          rosterData.push(rowData);
         }
-        
-        rosterData.push(rowData);
       });
     });
     
     // Batch update the sheet
-    const range = sheet.getRange(2, 1, rosterData.length, numCols);
+    const range = sheet.getRange(2, 1, rosterData.length, totalColumns);
     range.setValues(rosterData);
     
-    // Batch format the cells
+    // Format cells
     range.setWrap(true);
     range.setVerticalAlignment('middle');
     
     // Format the sheet
-    formatRosterSheet(sheet);
+    formatRosterSheet(sheet, totalColumns);
+    
+    // Store the generated data
+    updateOriginalData(sheet);
     
     // Add filters to the sheet
     addRosterFilters(sheet);
@@ -98,13 +80,13 @@ function generateRoster() {
   }
 }
 
-// Helper function to format the roster sheet
-function formatRosterSheet(sheet) {
+// Update formatRosterSheet to handle dynamic columns
+function formatRosterSheet(sheet, totalColumns) {
   // Auto-resize columns
-  sheet.autoResizeColumns(1, 12);
+  sheet.autoResizeColumns(1, totalColumns);
   
   // Set minimum column width for period columns
-  for (let i = 3; i <= 12; i++) {
+  for (let i = 3; i <= totalColumns; i++) {
     if (sheet.getColumnWidth(i) < 120) {
       sheet.setColumnWidth(i, 120);
     }
@@ -114,20 +96,14 @@ function formatRosterSheet(sheet) {
   const lastRow = sheet.getLastRow();
   
   // Batch format the entire range
-  const range = sheet.getRange(1, 1, lastRow, 12);
+  const range = sheet.getRange(1, 1, lastRow, totalColumns);
   range.setHorizontalAlignment('center');
   range.setBorder(true, true, true, true, true, true);
   
   // Format headers
-  const headerRange = sheet.getRange(1, 1, 1, 12);
+  const headerRange = sheet.getRange(1, 1, 1, totalColumns);
   headerRange.setBackground('#f3f3f3');
   headerRange.setFontWeight('bold');
-  
-  // Format break and lunch columns in one operation
-  const breakRange = sheet.getRange(2, 7, lastRow - 1, 1);
-  const lunchRange = sheet.getRange(2, 10, lastRow - 1, 1);
-  breakRange.setBackground('#e6e6e6');
-  lunchRange.setBackground('#e6e6e6');
 }
 
 // Create empty roster template
@@ -138,15 +114,31 @@ function createEmptyRoster(classes, periodsConfig) {
   // Clear existing content
   sheet.clear();
   
+  // Calculate total columns needed based on number of periods
+  const numPeriods = periodsConfig.periodsPerDay;
+  const totalColumns = 2 + numPeriods + 2; // Class, Day, Periods, Break, Lunch
+  
   // Create headers
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-  const headers = ['Class', 'Day', 'Period 1', 'Period 2', 'Period 3', 'Period 4', 
-                  'Break', 'Period 5', 'Period 6', 'Lunch', 'Period 7', 'Period 8'];
+  const headers = ['Class', 'Day'];
+  for (let i = 1; i <= numPeriods; i++) {
+    if (i === Math.floor(numPeriods / 2)) {
+      headers.push('Break');
+    } else if (i === Math.floor(3 * numPeriods / 4)) {
+      headers.push('Lunch');
+    } else {
+      headers.push(`Period ${i}`);
+    }
+  }
   
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   
-  return sheet;
+  return {
+    sheet: sheet,
+    totalColumns: headers.length,
+    breakColumn: headers.indexOf('Break') + 1,
+    lunchColumn: headers.indexOf('Lunch') + 1
+  };
 }
 
 function loadTeacherData() {
@@ -195,20 +187,28 @@ function loadPeriodsConfig() {
   const sheet = ss.getSheetByName(SHEET_NAMES.PERIODS_CONFIG);
   const data = sheet.getDataRange().getValues();
   
-  // Convert the 2D array into an object
-  const config = {};
-  for (let i = 1; i < data.length; i++) {
-    config[data[i][0]] = data[i][1];
+  // Parse general configuration
+  const config = {
+    periodDuration: parseInt(data[1][1]),
+    breakDuration: parseInt(data[2][1]),
+    lunchDuration: parseInt(data[3][1]),
+    periodsPerDay: parseInt(data[4][1]),
+    dayTimings: {}
+  };
+  
+  // Parse day-wise timings (starting from row 7)
+  for (let i = 7; i < data.length; i++) {
+    const day = data[i][0];
+    const isActive = data[i][3] === 'Yes';
+    if (isActive) {
+      config.dayTimings[day] = {
+        startTime: data[i][1],
+        endTime: data[i][2]
+      };
+    }
   }
   
-  return {
-    startTime: config['School Start Time'],
-    endTime: config['School End Time'],
-    periodDuration: parseInt(config['Period Duration (minutes)']),
-    breakDuration: parseInt(config['Break Duration (minutes)']),
-    lunchDuration: parseInt(config['Lunch Duration (minutes)']),
-    periodsPerDay: parseInt(config['Number of Periods per Day'])
-  };
+  return config;
 }
 
 // Load teacher availability data
@@ -282,78 +282,94 @@ function checkTeacherConflicts() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(SHEET_NAMES.ROSTER);
-    if (!sheet) return;
+    const originalDataSheet = ss.getSheetByName('_OriginalRosterData');
+    if (!sheet || !originalDataSheet) return;
 
-    // Get all roster data
-    const data = sheet.getDataRange().getValues();
-    if (data.length <= 1) return; // Empty or only headers
+    // Get original data (without filters)
+    const originalData = originalDataSheet.getDataRange().getValues();
+    if (originalData.length === 0) return;
 
-    // Clear existing conflict highlighting
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn())
+    // Clear existing conflict highlighting on visible sheet
+    sheet.getRange(3, 1, sheet.getLastRow() - 2, sheet.getLastColumn())
          .setBackground(null);
 
-    // Track teacher assignments by day and period
-    const teacherSchedule = {};
-    const conflictCells = [];
+    // Track conflicts by day and period
+    const teacherSchedule = new Map(); // Map of "day-period" to array of {teacher, class, row}
+    const conflictCells = new Set();
 
-    // Process each row (skipping header)
-    for (let row = 1; row < data.length; row++) {
-      const day = data[row][1];  // Column B: Day
-      const rowData = data[row];
-
-      // Initialize day in schedule if needed
-      if (!teacherSchedule[day]) {
-        teacherSchedule[day] = {};
-      }
+    // Find all conflicts in original data
+    for (let row = 0; row < originalData.length; row++) {
+      const day = originalData[row][1];      // Column B: Day
+      const className = originalData[row][0]; // Column A: Class
+      const rowData = originalData[row];
 
       // Check each period column (starting from C)
       for (let col = 2; col < rowData.length; col++) {
-        // Skip break and lunch columns
-        if (col === 6 || col === 9) continue;
-
         const cellValue = rowData[col];
-        if (!cellValue) continue;
+        
+        // Skip break, lunch, and empty cells
+        if (!cellValue || cellValue === 'BREAK' || cellValue === 'LUNCH') continue;
 
-        // Extract teacher name from cell (format: "Subject\n(Teacher Name)")
+        // Extract teacher name
         const match = cellValue.match(/\((.*?)\)$/);
         if (!match) continue;
 
         const teacherName = match[1];
-        const classInfo = rowData[0]; // Column A: Class
+        const key = `${day}-${col}`; // Key is day-period combination
 
-        // Initialize period in schedule if needed
-        if (!teacherSchedule[day][col]) {
-          teacherSchedule[day][col] = [];
+        if (!teacherSchedule.has(key)) {
+          teacherSchedule.set(key, []);
         }
 
-        // Check for conflicts
-        if (teacherSchedule[day][col].some(schedule => schedule.teacher === teacherName)) {
-          // Conflict found - mark both cells
-          conflictCells.push({row: row + 1, col: col + 1});
-          // Find and mark the conflicting cell from previous assignment
-          const conflictRow = teacherSchedule[day][col].find(s => s.teacher === teacherName).row;
-          conflictCells.push({row: conflictRow, col: col + 1});
+        const periodSchedule = teacherSchedule.get(key);
+        
+        // Check if this teacher is already scheduled in this period
+        const existingSchedule = periodSchedule.find(s => s.teacher === teacherName);
+        if (existingSchedule && existingSchedule.class !== className) {
+          // Conflict found - teacher is teaching different classes in same period
+          conflictCells.add(`${existingSchedule.row},${col}`);
+          conflictCells.add(`${row},${col}`);
         }
 
-        // Record this assignment
-        teacherSchedule[day][col].push({
+        periodSchedule.push({
           teacher: teacherName,
-          class: classInfo,
-          row: row + 1
+          class: className,
+          row: row
         });
       }
     }
 
-    // Highlight conflicts
-    conflictCells.forEach(cell => {
-      sheet.getRange(cell.row, cell.col)
-           .setBackground('#ffcdd2');  // Light red background
-    });
+    // Apply highlighting to visible sheet
+    const visibleData = sheet.getDataRange().getValues();
+
+    // Apply highlighting in one pass
+    for (let visRow = 2; visRow < visibleData.length; visRow++) {
+      for (let visCol = 2; visCol < visibleData[visRow].length; visCol++) {
+        const visibleCell = visibleData[visRow][visCol];
+        if (!visibleCell || visibleCell === 'BREAK' || visibleCell === 'LUNCH') continue;
+
+        // Check if this cell's position matches any conflict
+        const match = visibleCell.match(/\((.*?)\)$/);
+        if (!match) continue;
+
+        const teacherName = match[1];
+        const day = visibleData[visRow][1];
+        const key = `${day}-${visCol}`;
+
+        const periodSchedule = teacherSchedule.get(key) || [];
+        const teacherSchedules = periodSchedule.filter(s => s.teacher === teacherName);
+        
+        if (teacherSchedules.length > 1 && 
+            teacherSchedules.some(s => s.class !== visibleData[visRow][0])) {
+          sheet.getRange(visRow + 1, visCol + 1).setBackground('#ffcdd2');
+        }
+      }
+    }
 
     // Show conflict summary
-    if (conflictCells.length > 0) {
+    if (conflictCells.size > 0) {
       SpreadsheetApp.getActiveSpreadsheet().toast(
-        `Found ${conflictCells.length / 2} teacher conflicts (highlighted in red)`,
+        `Found ${conflictCells.size / 2} teacher conflicts (highlighted in red)`,
         'Warning',
         30
       );
@@ -381,4 +397,32 @@ function onRosterEdit(e) {
     Utilities.sleep(100);
     checkTeacherConflicts();
   }
+}
+
+// Store the generated data
+function updateOriginalData(sheet) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let originalDataSheet = ss.getSheetByName('_OriginalRosterData');
+  if (!originalDataSheet) {
+    originalDataSheet = ss.insertSheet('_OriginalRosterData');
+    originalDataSheet.hideSheet();
+  }
+  
+  // Store the current roster data (excluding filter row)
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  originalDataSheet.clear();
+  originalDataSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+}
+
+// Helper function to format time
+function formatTime(timeStr) {
+  const date = new Date(`1/1/2000 ${timeStr}`);
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'h:mm a');
+}
+
+// Helper function to add minutes to time
+function addMinutes(timeStr, minutes) {
+  const date = new Date(`1/1/2000 ${timeStr}`);
+  date.setMinutes(date.getMinutes() + minutes);
+  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'h:mm a');
 } 

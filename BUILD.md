@@ -71,3 +71,13 @@ clasp push
 ```
 clasp deploy --title "Rosterio"
 ```
+
+8a. If you get an error:
+```
+Scripts may only have up to 20 versioned deployments at a time.
+```
+Then you need to delete some deployments. The following command will list all deployments and undeploy them:
+
+```
+clasp deployments | awk '{print $2}' | xargs -n 1 clasp undeploy
+```
