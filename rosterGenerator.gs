@@ -84,6 +84,9 @@ function generateRoster() {
     // Format the sheet
     formatRosterSheet(sheet);
     
+    // Add filters to the sheet
+    addRosterFilters(sheet);
+    
     // Check for conflicts after generation
     checkTeacherConflicts();
     
