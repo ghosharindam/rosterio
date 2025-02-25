@@ -1,3 +1,13 @@
+// Sheet names constant for reference
+// const SHEET_NAMES = {
+//   CONFIG: 'Configuration',
+//   ROSTER: 'Generated-Roster',
+//   PERIODS_CONFIG: 'Periods-Configuration',
+//   TEACHER_SUBJECTS: 'Teacher-Subjects',
+//   CLASS_CONFIG: 'Class-Configuration',
+//   SUBJECT_PERIODS: 'Subject-Periods'
+// };
+
 function generateRoster() {
   try {
     // Load all required data
@@ -9,48 +19,54 @@ function generateRoster() {
     // Create empty roster template and get sheet info
     const { sheet, totalColumns, breakColumn, lunchColumn } = createEmptyRoster(classes, periodsConfig);
     
+    // Use standard week days instead of active days from config
+    const standardDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+    
     // Prepare data array for batch update
-    const numRows = classes.length * Object.keys(periodsConfig.dayTimings).length;
+    const numRows = classes.length * standardDays.length;
     const rosterData = [];
     
     // Generate roster data
     classes.forEach((cls, classIndex) => {
-      Object.keys(periodsConfig.dayTimings).forEach(day => {
-        if (periodsConfig.dayTimings[day].isActive !== false) {
-          const rowData = new Array(totalColumns).fill('');
-          rowData[0] = `${cls.standard}-${cls.section}`;
-          rowData[1] = day;
-          
-          // Fill in periods
-          for (let col = 2; col < totalColumns; col++) {
-            if (col === breakColumn - 1) {
-              rowData[col] = 'BREAK';
-            } else if (col === lunchColumn - 1) {
-              rowData[col] = 'LUNCH';
-            } else {
-              // Add subject and teacher assignment
-              const standard = cls.standard;
-              const subjects = subjectPeriods[standard] || {};
-              const availableSubjects = Object.keys(subjects);
+      standardDays.forEach(day => {
+        const rowData = new Array(totalColumns).fill('');
+        rowData[0] = `${cls.standard}-${cls.section}`;
+        rowData[1] = day;
+        
+        // Fill in periods
+        for (let col = 2; col < totalColumns; col++) {
+          if (col === breakColumn - 1) {
+            rowData[col] = 'BREAK';
+          } else if (col === lunchColumn - 1) {
+            rowData[col] = 'LUNCH';
+          } else {
+            // Add subject and teacher assignment
+            const standard = cls.standard;
+            const subjects = subjectPeriods[standard] || {};
+            const availableSubjects = Object.keys(subjects);
+            
+            if (availableSubjects.length > 0) {
+              const randomSubject = availableSubjects[Math.floor(Math.random() * availableSubjects.length)];
+              const teachersForSubject = teachers.filter(t => 
+                t.standards[standard] === true && t.subject === randomSubject
+              );
               
-              if (availableSubjects.length > 0) {
-                const randomSubject = availableSubjects[Math.floor(Math.random() * availableSubjects.length)];
-                const teachersForSubject = teachers.filter(t => 
-                  t.standards[standard] === true && t.subject === randomSubject
-                );
-                
-                if (teachersForSubject.length > 0) {
-                  const randomTeacher = teachersForSubject[Math.floor(Math.random() * teachersForSubject.length)];
-                  rowData[col] = `${randomSubject}\n(${randomTeacher.name})`;
-                }
+              if (teachersForSubject.length > 0) {
+                const randomTeacher = teachersForSubject[Math.floor(Math.random() * teachersForSubject.length)];
+                rowData[col] = `${randomSubject}\n(${randomTeacher.name})`;
               }
             }
           }
-          
-          rosterData.push(rowData);
         }
+        
+        rosterData.push(rowData);
       });
     });
+    
+    // Ensure we have data to update
+    if (rosterData.length === 0) {
+      throw new Error("No roster data generated. Please check class and teacher configurations.");
+    }
     
     // Batch update the sheet
     const range = sheet.getRange(2, 1, rosterData.length, totalColumns);
@@ -116,28 +132,59 @@ function createEmptyRoster(classes, periodsConfig) {
   
   // Calculate total columns needed based on number of periods
   const numPeriods = periodsConfig.periodsPerDay;
-  const totalColumns = 2 + numPeriods + 2; // Class, Day, Periods, Break, Lunch
+  
+  // Ensure numPeriods is valid
+  if (!numPeriods || numPeriods <= 0) {
+    throw new Error("Invalid number of periods: " + numPeriods);
+  }
   
   // Create headers
   const headers = ['Class', 'Day'];
+  
+  // Add period headers with break and lunch
+  let breakAdded = false;
+  let lunchAdded = false;
+  let breakColumn = -1;
+  let lunchColumn = -1;
+  
   for (let i = 1; i <= numPeriods; i++) {
-    if (i === Math.floor(numPeriods / 2)) {
+    // Add break around 1/3 of the way through
+    if (i === Math.ceil(numPeriods / 3) && !breakAdded) {
       headers.push('Break');
-    } else if (i === Math.floor(3 * numPeriods / 4)) {
+      breakColumn = headers.length;
+      breakAdded = true;
+    } 
+    // Add lunch around 2/3 of the way through
+    else if (i === Math.ceil(2 * numPeriods / 3) && !lunchAdded) {
       headers.push('Lunch');
-    } else {
+      lunchColumn = headers.length;
+      lunchAdded = true;
+    } 
+    else {
       headers.push(`Period ${i}`);
     }
   }
   
+  // If break or lunch wasn't added, add them at the end
+  if (!breakAdded) {
+    headers.push('Break');
+    breakColumn = headers.length;
+  }
+  
+  if (!lunchAdded) {
+    headers.push('Lunch');
+    lunchColumn = headers.length;
+  }
+  
+  // Set the headers
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
   
   return {
     sheet: sheet,
     totalColumns: headers.length,
-    breakColumn: headers.indexOf('Break') + 1,
-    lunchColumn: headers.indexOf('Lunch') + 1
+    breakColumn: breakColumn,
+    lunchColumn: lunchColumn
   };
 }
 
@@ -181,6 +228,27 @@ function displayRoster(rosterData) {
   // This will format and display the generated roster
 }
 
+// Get the number of periods from configuration
+function getPeriodCount() {
+  // Get the number of periods from the configuration
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = ss.getSheetByName(SHEET_NAMES.PERIODS_CONFIG);
+  
+  // If config sheet exists, get the number of periods from it
+  if (configSheet) {
+    // Find the periods configuration row
+    const configData = configSheet.getDataRange().getValues();
+    for (let i = 0; i < configData.length; i++) {
+      if (configData[i][0] === 'Number of Periods') {
+        return parseInt(configData[i][1]);
+      }
+    }
+  }
+  
+  // Fallback to a default number of periods if not found in config
+  return 8; // Default to 8 periods if not specified
+}
+
 // Load configuration from the Periods Configuration sheet
 function loadPeriodsConfig() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -192,21 +260,16 @@ function loadPeriodsConfig() {
     periodDuration: parseInt(data[1][1]),
     breakDuration: parseInt(data[2][1]),
     lunchDuration: parseInt(data[3][1]),
-    periodsPerDay: parseInt(data[4][1]),
-    dayTimings: {}
-  };
-  
-  // Parse day-wise timings (starting from row 7)
-  for (let i = 7; i < data.length; i++) {
-    const day = data[i][0];
-    const isActive = data[i][3] === 'Yes';
-    if (isActive) {
-      config.dayTimings[day] = {
-        startTime: data[i][1],
-        endTime: data[i][2]
-      };
+    periodsPerDay: getPeriodCount(), // Use the static number of periods from configuration
+    // Standard week days
+    dayTimings: {
+      'Monday': { isActive: true },
+      'Tuesday': { isActive: true },
+      'Wednesday': { isActive: true },
+      'Thursday': { isActive: true },
+      'Friday': { isActive: true }
     }
-  }
+  };
   
   return config;
 }

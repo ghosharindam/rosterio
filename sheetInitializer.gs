@@ -30,33 +30,21 @@ function createPeriodsConfigSheet(ss) {
     ['Period Duration (minutes)', '45', '', ''],
     ['Break Duration (minutes)', '15', '', ''],
     ['Lunch Duration (minutes)', '30', '', ''],
-    ['Number of Periods per Day', '8', '', ''],
-    ['', '', '', '']
+    ['Number of Periods', '8', '', ''],
   ];
   
-  const dayConfig = [
-    ['Day-wise Timings', 'Start Time', 'End Time', 'Active'],
-    ['Monday', '8:30 AM', '3:30 PM', 'Yes'],
-    ['Tuesday', '8:30 AM', '3:30 PM', 'Yes'],
-    ['Wednesday', '8:30 AM', '3:30 PM', 'Yes'],
-    ['Thursday', '8:30 AM', '3:30 PM', 'Yes'],
-    ['Friday', '8:30 AM', '3:30 PM', 'Yes'],
-    ['Saturday', '8:30 AM', '1:30 PM', 'No'],
-    ['Sunday', '', '', 'No']
-  ];
   
   // Clear existing content
   sheet.clear();
   
   // Set the values
-  const allData = [...generalConfig, ...dayConfig];
+  const allData = [...generalConfig];
   sheet.getRange(1, 1, allData.length, 4).setValues(allData);
   
   // Format the sheet
   sheet.getRange("A1:D1").setBackground("#f3f3f3");
-  sheet.getRange("A7:D7").setBackground("#f3f3f3");
   sheet.getRange("A1:D1").merge();
-  sheet.getRange("A7:D7").merge();
+
   
   // Set time validation for start and end times
   const timeRange1 = sheet.getRange("B8:B14");
@@ -68,13 +56,8 @@ function createPeriodsConfigSheet(ss) {
   timeRange1.setDataValidation(timeValidation);
   timeRange2.setDataValidation(timeValidation);
   
-  // Set Yes/No validation for Active column
-  const activeRange = sheet.getRange("D8:D14");
-  const activeValidation = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['Yes', 'No'], true)
-    .build();
-  activeRange.setDataValidation(activeValidation);
-  
+
+
   // Format headers
   sheet.getRange(1, 1, allData.length, 4).setFontWeight('bold');
   sheet.setFrozenRows(1);

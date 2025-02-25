@@ -1,3 +1,9 @@
+// Sheet names constant for reference
+// const SHEET_NAMES = {
+//   CONFIG: 'Configuration',
+//   ROSTER: 'Generated-Roster'
+// };
+
 // Create and setup Teacher-View sheet
 function setupTeacherView() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -57,9 +63,23 @@ function setupTeacherView() {
 
 // Get the number of periods from the original data
 function getPeriodCount() {
+  // Get the number of periods from the configuration
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const originalDataSheet = ss.getSheetByName('_OriginalRosterData');
-  return originalDataSheet.getLastColumn() - 2; // Subtract 2 for the first two columns (index and day)
+  const configSheet = ss.getSheetByName(SHEET_NAMES.CONFIG);
+  
+  // If config sheet exists, get the number of periods from it
+  if (configSheet) {
+    // Find the periods configuration row
+    const configData = configSheet.getDataRange().getValues();
+    for (let i = 0; i < configData.length; i++) {
+      if (configData[i][0] === 'Number of Periods') {
+        return parseInt(configData[i][1]);
+      }
+    }
+  }
+  
+  // Fallback to a default number of periods if not found in config
+  return 8; // Default to 8 periods if not specified
 }
 
 // Create trigger for teacher view changes
