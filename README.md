@@ -1,29 +1,48 @@
-# Rosterio - School Timetable Generator
+# Roster App - School Timetable Generator
 
 A Google Apps Script application for generating and managing school timetables.
 
 ## Project Structure
 
-The codebase is organized into the following modules:
+The codebase is organized into logical modules simulating a directory structure:
 
-- **Code.gs** - Main entry point, menu setup, and sheet initialization
-- **rosterGenerator.gs** - Core roster generation function that orchestrates the process
-- **dataLoader.gs** - Functions for loading data from sheets
-- **rosterCreator.gs** - Functions for creating and formatting the roster
-- **conflictChecker.gs** - Functions for checking and highlighting conflicts
-- **schedulingHelpers.gs** - Helper functions for roster scheduling
-- **sampleData.gs** - Functions for populating sample data
-- **sheetInitializer.gs** - Functions for initializing sheet structures
-- **teacherView.gs** - Functions for teacher-specific views
-- **rosterFilters.gs** - Functions for filtering the roster
+### Core Application
+- **app.gs** - Main application file with constants and exposed functions
 
-## Key Functions
+### Initialization Module (init/)
+- **init.core.gs** - Core initialization functions
+- **init.sheets.gs** - Sheet creation and setup
+- **init.data.gs** - Sample data population
 
-- `initializeSheets()` - Creates all necessary sheets with the required structure
-- `generateRoster()` - Main function to generate the timetable
-- `populateSampleData()` - Populates sheets with sample data for testing
-- `clearAllData()` - Clears all data from sheets
-- `checkTeacherConflicts()` - Checks for and highlights scheduling conflicts
+### Data Module (data/)
+- **data.loader.gs** - Functions for loading data from sheets
+
+### Roster Management (roster/)
+- **roster.generator.gs** - Core roster generation function
+- **roster.creator.gs** - Roster creation and formatting
+- **roster.helpers.gs** - Scheduling helper functions
+- **roster.conflicts.gs** - Conflict checking and highlighting
+- **roster.filters.gs** - Roster filtering functionality
+
+### User Interface (ui/)
+- **ui.menu.gs** - Menu creation and event handling
+
+### Utilities (utils/)
+- **utils.common.gs** - Common utility functions
+
+## Namespace Structure
+
+All code is organized into namespaces to prevent global namespace pollution:
+
+- `Init` - Initialization functions
+- `Data` - Data loading functions
+- `Roster` - Roster management functions
+  - `Roster.Creator` - Roster creation functions
+  - `Roster.Conflicts` - Conflict management
+  - `Roster.Helpers` - Scheduling helpers
+  - `Roster.Filters` - Filtering functions
+- `UI` - User interface functions
+- `Utils` - Utility functions
 
 ## Sheet Structure
 
@@ -41,4 +60,11 @@ The application uses the following sheets:
 2. Optionally run "Populate Sample Data" to load test data
 3. Configure your data in the various sheets
 4. Run "Generate Roster" to create the timetable
-5. View and resolve any conflicts highlighted in red 
+5. View and resolve any conflicts highlighted in red
+
+## Development Notes
+
+- Each module has its own file(s) for better code organization
+- Namespaces prevent function name conflicts
+- The app.gs file provides the global API functions that are exposed to the UI
+- No function is defined directly in the global scope except necessary entry points 

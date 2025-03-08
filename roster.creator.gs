@@ -1,7 +1,16 @@
-// Functions for creating and formatting the roster sheet
+/**
+ * Roster creator module
+ * Contains functions for creating and formatting the roster sheet
+ */
+var Roster = Roster || {};
+Roster.Creator = Roster.Creator || {};
 
-// Update formatRosterSheet to handle dynamic columns
-function formatRosterSheet(sheet, totalColumns) {
+/**
+ * Format the roster sheet
+ * @param {SpreadsheetApp.Sheet} sheet - The roster sheet to format
+ * @param {number} totalColumns - The total number of columns in the sheet
+ */
+Roster.Creator.formatRosterSheet = function(sheet, totalColumns) {
   // Auto-resize columns
   sheet.autoResizeColumns(1, totalColumns);
   
@@ -24,15 +33,25 @@ function formatRosterSheet(sheet, totalColumns) {
   const headerRange = sheet.getRange(1, 1, 1, totalColumns);
   headerRange.setBackground('#f3f3f3');
   headerRange.setFontWeight('bold');
-}
+};
 
-// Create empty roster template
-function createEmptyRoster(classes, periodsConfig) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.ROSTER);
+/**
+ * Create an empty roster template
+ * @param {Array} classes - Array of class objects
+ * @param {Object} periodsConfig - Configuration for periods
+ * @return {Object} Object with sheet, totalColumns, breakColumn, and lunchColumn
+ */
+Roster.Creator.createEmptyRoster = function(classes, periodsConfig) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   
-  // Clear existing content
-  sheet.clear();
+  // Delete existing roster sheet if it exists to avoid conflicts
+  let sheet = spreadsheet.getSheetByName(SHEET_NAMES.ROSTER);
+  if (sheet) {
+    spreadsheet.deleteSheet(sheet);
+  }
+  
+  // Create a fresh roster sheet
+  sheet = spreadsheet.insertSheet(SHEET_NAMES.ROSTER);
   
   // Calculate total columns needed based on number of periods
   const numPeriods = periodsConfig.periodsPerDay;
@@ -90,44 +109,33 @@ function createEmptyRoster(classes, periodsConfig) {
     breakColumn: breakColumn,
     lunchColumn: lunchColumn
   };
-}
+};
 
-// Store the generated data
-function updateOriginalData(sheet) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let originalDataSheet = ss.getSheetByName('_OriginalRosterData');
-  if (!originalDataSheet) {
-    originalDataSheet = ss.insertSheet('_OriginalRosterData');
-    originalDataSheet.hideSheet();
+/**
+ * Store the generated data in a hidden sheet for reference
+ * @param {SpreadsheetApp.Sheet} sheet - The roster sheet containing the data
+ */
+Roster.Creator.updateOriginalData = function(sheet) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Delete the old original data sheet if it exists
+  let originalDataSheet = spreadsheet.getSheetByName('_OriginalRosterData');
+  if (originalDataSheet) {
+    spreadsheet.deleteSheet(originalDataSheet);
   }
   
-  // Store the current roster data (excluding filter row)
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
-  originalDataSheet.clear();
-  originalDataSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
-}
-
-// Function to display the generated roster
-function displayRoster(rosterData) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.ROSTER);
+  // Create a new original data sheet
+  originalDataSheet = spreadsheet.insertSheet('_OriginalRosterData');
+  originalDataSheet.hideSheet();
   
-  // Clear existing roster
-  sheet.clear();
+  // Get data starting from row 3 (after headers and filter row)
+  const startRow = 3;
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
   
-  // Implementation of roster display logic
-  // This will format and display the generated roster
-}
-
-// Helper function to format time
-function formatTime(timeStr) {
-  const date = new Date(`1/1/2000 ${timeStr}`);
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'h:mm a');
-}
-
-// Helper function to add minutes to time
-function addMinutes(timeStr, minutes) {
-  const date = new Date(`1/1/2000 ${timeStr}`);
-  date.setMinutes(date.getMinutes() + minutes);
-  return Utilities.formatDate(date, Session.getScriptTimeZone(), 'h:mm a');
-} 
+  // Only copy if there's data to copy
+  if (lastRow >= startRow) {
+    const data = sheet.getRange(startRow, 1, lastRow - startRow + 1, lastCol).getValues();
+    originalDataSheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+  }
+}; 

@@ -1,11 +1,18 @@
-// Functions for checking and highlighting conflicts in the roster
+/**
+ * Roster conflicts module
+ * Contains functions for checking and highlighting conflicts in the roster
+ */
+var Roster = Roster || {};
+Roster.Conflicts = Roster.Conflicts || {};
 
-// Function to check and highlight teacher conflicts
-function checkTeacherConflicts() {
+/**
+ * Check and highlight teacher conflicts in the roster
+ */
+Roster.Conflicts.checkTeacherConflicts = function() {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName(SHEET_NAMES.ROSTER);
-    const originalDataSheet = ss.getSheetByName('_OriginalRosterData');
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = spreadsheet.getSheetByName(SHEET_NAMES.ROSTER);
+    const originalDataSheet = spreadsheet.getSheetByName('_OriginalRosterData');
     if (!sheet || !originalDataSheet) return;
 
     // Get original data (without filters)
@@ -101,44 +108,55 @@ function checkTeacherConflicts() {
   } catch (e) {
     console.error('Error checking teacher conflicts:', e);
   }
-}
+};
 
-// Add trigger for on-edit checks
-function createOnEditTrigger() {
-  const ss = SpreadsheetApp.getActive();
-  ScriptApp.newTrigger('onRosterEdit')
-           .forSpreadsheet(ss)
+/**
+ * Create an on-edit trigger for checking conflicts
+ */
+Roster.Conflicts.createOnEditTrigger = function() {
+  const spreadsheet = SpreadsheetApp.getActive();
+  ScriptApp.newTrigger('Roster.Conflicts.onRosterEdit')
+           .forSpreadsheet(spreadsheet)
            .onEdit()
            .create();
-}
+};
 
-// Handle edit events
-function onRosterEdit(e) {
+/**
+ * Handle edit events on the roster sheet
+ * @param {Object} e - The edit event object
+ */
+Roster.Conflicts.onRosterEdit = function(e) {
   // Check if edit was in the roster sheet
   if (e.source.getActiveSheet().getName() === SHEET_NAMES.ROSTER) {
     // Wait a brief moment for the edit to complete
     Utilities.sleep(100);
-    checkTeacherConflicts();
+    Roster.Conflicts.checkTeacherConflicts();
   }
-}
+};
 
-// Validate teacher-subject-standard combinations
-function validateTeacherSubjectMatrix() {
+/**
+ * Validate teacher-subject-standard combinations
+ */
+Roster.Conflicts.validateTeacherSubjectMatrix = function() {
   // Validate teacher-subject-standard combinations
   console.log("Validating teacher subject matrix...");
   // Implementation...
-}
+};
 
-// Validate period timings and counts
-function validatePeriodConfig() {
+/**
+ * Validate period timings and counts
+ */
+Roster.Conflicts.validatePeriodConfig = function() {
   // Validate period timings and counts
   console.log("Validating period configuration...");
   // Implementation...
-}
+};
 
-// Check if subject period requirements can be met
-function validateSubjectDistribution() {
+/**
+ * Check if subject period requirements can be met
+ */
+Roster.Conflicts.validateSubjectDistribution = function() {
   // Check if subject period requirements can be met
   console.log("Validating subject distribution...");
   // Implementation...
-} 
+}; 

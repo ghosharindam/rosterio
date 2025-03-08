@@ -1,11 +1,16 @@
-// Functions for loading data from various sheets
-// for the roster generation process
+/**
+ * Data loading module
+ * Contains functions for loading data from sheets
+ */
+var Data = Data || {};
 
-// Get the number of periods from configuration
-function getPeriodCount() {
-  // Get the number of periods from the configuration
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const configSheet = ss.getSheetByName(SHEET_NAMES.PERIODS_CONFIG);
+/**
+ * Get the number of periods from configuration
+ * @return {number} The number of periods (default 8)
+ */
+Data.getPeriodCount = function() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const configSheet = spreadsheet.getSheetByName(SHEET_NAMES.PERIODS_CONFIG);
   
   // If config sheet exists, get the number of periods from it
   if (configSheet) {
@@ -20,12 +25,15 @@ function getPeriodCount() {
   
   // Fallback to a default number of periods if not found in config
   return 8; // Default to 8 periods if not specified
-}
+};
 
-// Load configuration from the Periods Configuration sheet
-function loadPeriodsConfig() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.PERIODS_CONFIG);
+/**
+ * Load configuration from the Periods Configuration sheet
+ * @return {Object} Configuration object with period settings
+ */
+Data.loadPeriodsConfig = function() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(SHEET_NAMES.PERIODS_CONFIG);
   const data = sheet.getDataRange().getValues();
   
   // Parse general configuration
@@ -33,7 +41,7 @@ function loadPeriodsConfig() {
     periodDuration: parseInt(data[1][1]),
     breakDuration: parseInt(data[2][1]),
     lunchDuration: parseInt(data[3][1]),
-    periodsPerDay: getPeriodCount(), // Use the static number of periods from configuration
+    periodsPerDay: Data.getPeriodCount(), // Use the static number of periods from configuration
     // Standard week days
     dayTimings: {
       'Monday': { isActive: true },
@@ -45,12 +53,15 @@ function loadPeriodsConfig() {
   };
   
   return config;
-}
+};
 
-// Load teacher availability data
-function loadTeacherSubjects() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.TEACHER_SUBJECTS);
+/**
+ * Load teacher availability data
+ * @return {Array} Array of teacher objects with subjects and standards
+ */
+Data.loadTeacherSubjects = function() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(SHEET_NAMES.TEACHER_SUBJECTS);
   const data = sheet.getDataRange().getValues();
   
   const teachers = [];
@@ -71,12 +82,15 @@ function loadTeacherSubjects() {
   }
   
   return teachers;
-}
+};
 
-// Load class configuration
-function loadClassConfig() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.CLASS_CONFIG);
+/**
+ * Load class configuration
+ * @return {Array} Array of class objects with standard and section
+ */
+Data.loadClassConfig = function() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(SHEET_NAMES.CLASS_CONFIG);
   const data = sheet.getDataRange().getValues();
   
   const classes = [];
@@ -88,12 +102,15 @@ function loadClassConfig() {
   }
   
   return classes;
-}
+};
 
-// Load subject period requirements
-function loadSubjectPeriods() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.SUBJECT_PERIODS);
+/**
+ * Load subject period requirements
+ * @return {Object} Object with subject period requirements by standard
+ */
+Data.loadSubjectPeriods = function() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName(SHEET_NAMES.SUBJECT_PERIODS);
   const data = sheet.getDataRange().getValues();
   
   const requirements = {};
@@ -111,20 +128,4 @@ function loadSubjectPeriods() {
   }
   
   return requirements;
-}
-
-function loadTeacherData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAMES.TEACHER_SUBJECTS);
-  const data = sheet.getDataRange().getValues();
-  
-  // Remove header row and process data
-  data.shift();
-  return data.map(row => ({
-    teacherName: row[0],
-    subject: row[1],
-    standard: row[2],
-    minPeriods: row[3],
-    maxPeriods: row[4]
-  }));
-} 
+}; 
