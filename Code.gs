@@ -10,7 +10,7 @@ function onOpen() {
     .addToUi();
 }
 
-// Constants for sheet names
+// Constants for sheet names - global definition used by all modules
 const SHEET_NAMES = {
   CONFIG: 'Configuration',
   ROSTER: 'Generated-Roster',

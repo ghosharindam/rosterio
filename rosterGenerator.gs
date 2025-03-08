@@ -1,3 +1,7 @@
+// Main roster generation functionality
+// This file contains the core generator function that coordinates
+// the roster creation process by using helper functions from other files
+
 // Sheet names constant for reference
 // const SHEET_NAMES = {
 //   CONFIG: 'Configuration',
@@ -8,6 +12,10 @@
 //   SUBJECT_PERIODS: 'Subject-Periods'
 // };
 
+/**
+ * Main function to generate the roster
+ * Orchestrates the entire roster generation process
+ */
 function generateRoster() {
   try {
     // Load all required data
@@ -488,4 +496,25 @@ function addMinutes(timeStr, minutes) {
   const date = new Date(`1/1/2000 ${timeStr}`);
   date.setMinutes(date.getMinutes() + minutes);
   return Utilities.formatDate(date, Session.getScriptTimeZone(), 'h:mm a');
+}
+
+// Add trigger for on-edit checks for conflict detection
+function setupTriggers() {
+  try {
+    // Delete existing triggers to avoid duplicates
+    const triggers = ScriptApp.getProjectTriggers();
+    for (let i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === 'onRosterEdit') {
+        ScriptApp.deleteTrigger(triggers[i]);
+      }
+    }
+    
+    // Create new on-edit trigger
+    createOnEditTrigger();
+    
+    SpreadsheetApp.getActiveSpreadsheet().toast('Triggers set up successfully!');
+  } catch (e) {
+    console.error('Error setting up triggers:', e);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Error setting up triggers: ' + e.toString(), 'Error', 30);
+  }
 } 
