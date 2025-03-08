@@ -59,11 +59,11 @@ Roster.generate = function() {
     // Store the generated data
     Roster.Creator.updateOriginalData(sheet);
     
-    // Add filters to the sheet
-    Roster.Filters.addRosterFilters(sheet);
+    // // Add filters to the sheet
+    // Roster.Filters.addRosterFilters(sheet);
     
-    // Set up filter handlers
-    Roster.Filters.setupFilterHandlers();
+    // // Set up filter handlers
+    // Roster.Filters.setupFilterHandlers();
     
     // Check for conflicts after generation
     Roster.Conflicts.checkTeacherConflicts();

@@ -38,10 +38,10 @@ Init.populateTeacherSubjectData = function(spreadsheet) {
   const data = [
     ['John Smith', 'Mathematics', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'No'],
     ['Mary Johnson', 'English', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'No'],
-    ['Robert Brown', 'Science', 'No', 'No', 'No', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No', 'No', 'No', 'No'],
-    ['Patricia Davis', 'History', 'No', 'No', 'No', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No', 'No', 'No', 'No'],
-    ['Michael Wilson', 'Geography', 'No', 'No', 'No', 'No', 'No', 'No', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No'],
-    ['Linda Martinez', 'Art', 'No', 'No', 'No', 'No', 'No', 'No', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No'],
+    ['Robert Brown', 'Science', 'Yes', 'Yes', 'No', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No', 'No', 'No', 'No'],
+    ['Patricia Davis', 'History', 'Yes', 'Yes', 'No', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No', 'No', 'No', 'No'],
+    ['Michael Wilson', 'Geography', 'Yes', 'Yes', 'No', 'No', 'No', 'No', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No'],
+    ['Linda Martinez', 'Art', 'Yes', 'Yes', 'No', 'No', 'No', 'No', 'Yes', 'Yes', 'Yes', 'No', 'No', 'No'],
     ['James Taylor', 'Physical Education', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'Yes', 'Yes', 'Yes'],
     ['Elizabeth Anderson', 'Computer Science', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'No', 'Yes', 'Yes', 'Yes']
   ];
@@ -69,12 +69,6 @@ Init.populateClassConfigData = function(spreadsheet) {
     ['II', 'B'],
     ['III', 'A'],
     ['III', 'B'],
-    ['IV', 'A'],
-    ['IV', 'B'],
-    ['V', 'A'],
-    ['V', 'B'],
-    ['VI', 'A'],
-    ['VI', 'B']
   ];
   
   // Write data to sheet
