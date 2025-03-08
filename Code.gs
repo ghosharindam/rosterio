@@ -24,6 +24,9 @@ const SHEET_NAMES = {
 function initializeSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
+  // First, clear all existing data
+  clearAllData();
+  
   // Create Configuration sheet
   // createConfigSheet(ss);
   
@@ -41,6 +44,9 @@ function initializeSheets() {
   
   // Create Roster sheet (empty template)
   createRosterSheet(ss);
+  
+  // Show success message
+  SpreadsheetApp.getUi().alert('All sheets have been initialized successfully.');
 }
 
 // Need to implement:
@@ -197,4 +203,31 @@ function testValidations() {
   validateSubjectDistribution();
   
   Logger.log('Validation tests completed');
+}
+
+// Clear all data from sheets
+function clearAllData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // Clear data from all sheets defined in SHEET_NAMES
+  Object.values(SHEET_NAMES).forEach(sheetName => {
+    const sheet = ss.getSheetByName(sheetName);
+    if (sheet) {
+      // Delete the sheet (it will be recreated with empty data)
+      ss.deleteSheet(sheet);
+    }
+  });
+  
+  // Remove any other sheets that might have been generated
+  const generatedRosterPattern = /^Generated-Roster/;
+  ss.getSheets().forEach(sheet => {
+    const sheetName = sheet.getName();
+    // Delete any generated roster sheets (if they follow a pattern)
+    if (generatedRosterPattern.test(sheetName) && !Object.values(SHEET_NAMES).includes(sheetName)) {
+      ss.deleteSheet(sheet);
+    }
+  });
+  
+  // Show success message
+  SpreadsheetApp.getUi().alert('All data has been cleared successfully.');
 }
