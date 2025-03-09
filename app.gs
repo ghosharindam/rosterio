@@ -1,4 +1,4 @@
-/**
+app.gs /**
  * Roster App - School Timetable Generator
  * Main application file
  */
@@ -54,4 +54,22 @@ function clearAllData() {
  */
 function onEdit(e) {
   Roster.Conflicts.onRosterEdit(e);
+}
+
+/**
+ * Validate the schedule feasibility
+ * Checks if the roster generation can satisfy all constraints
+ */
+function validateSchedule() {
+  if (typeof Roster !== 'undefined' && 
+      typeof Roster.Validator !== 'undefined' && 
+      typeof Roster.Validator.validateRoster === 'function') {
+    Roster.Validator.validateRoster();
+  } else {
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      'Schedule validation module is not available. Please check your installation.',
+      'Error',
+      10
+    );
+  }
 }

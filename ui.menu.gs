@@ -20,6 +20,8 @@ UI.createMenu = function(ui) {
   ui.createMenu('Roster App')
     .addItem('Initialize Sheets', 'initializeSheets')
     .addItem('Populate Sample Data', 'populateSampleData')
+    .addSeparator()
+    .addItem('Validate Schedule Feasibility', 'validateSchedule')
     .addItem('Generate Roster', 'generateRoster')
     .addSeparator()
     .addItem('Clear All Data', 'clearAllData')

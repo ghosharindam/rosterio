@@ -49,7 +49,7 @@ Init.populateTeacherSubjectData = function(spreadsheet) {
     ['GTB','Physics','No','No','No','No','No','No','No','No','No','No','Yes','Yes','No','No'],
     ['IBS','Comp','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','Yes','Yes','No','No'],
     ['IMR','Maths','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No','No','No'],
-    ['JHA','Pol Sc','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No','No','No'],
+    ['JHA','Pol Sc','No','No','No','No','No','No','No','No','No','No','Yes','Yes','Yes','Yes'],
     ['JBS','Phy Ed','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No','No','No'],
     ['KTB','Phy Ed','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No','No','No'],
     ['MDM','Maths','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No','No','No'],
