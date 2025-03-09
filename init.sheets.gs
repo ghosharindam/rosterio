@@ -17,16 +17,16 @@ Init.Sheets.createTeacherSubjectSheet = function(spreadsheet) {
   // Create new sheet
   sheet = spreadsheet.insertSheet(SHEET_NAMES.TEACHER_SUBJECTS);
   
-  // Set up headers
-  const headers = ['Teacher Name', 'Subject'];
-  // Add Standard columns (I to XII)
-  for (let i = 1; i <= 12; i++) {
-    headers.push(`Standard ${Utils.toRoman(i)}`);
-  }
+//   // Set up headers
+//   const headers = ['Teacher Name', 'Subject'];
+//   // Add Standard columns (I to XII)
+//   for (let i = 1; i <= 12; i++) {
+//     headers.push(`Standard ${Utils.toRoman(i)}`);
+//   }
   
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
-  sheet.setFrozenRows(1);
+//   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+//   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+//   sheet.setFrozenRows(1);
 };
 
 /**
