@@ -1,4 +1,4 @@
-app.gs /**
+/**
  * Roster App - School Timetable Generator
  * Main application file
  */
