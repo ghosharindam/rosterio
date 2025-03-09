@@ -70,6 +70,16 @@ Roster.generate = function() {
     
     SpreadsheetApp.getActiveSpreadsheet().toast('Roster generated successfully!');
     
+    // Generate the Teacher-View after roster generation
+    try {
+      if (typeof TeacherView !== 'undefined' && typeof TeacherView.generateAfterRoster === 'function') {
+        TeacherView.generateAfterRoster();
+      }
+    } catch (viewError) {
+      console.error('Error generating Teache-View:', viewError);
+      // Don't let Teacher-View errors affect the main roster generation
+    }
+    
   } catch (e) {
     SpreadsheetApp.getActiveSpreadsheet().toast('Error generating roster: ' + e.toString(), 'Error', 30);
     console.error('Roster generation error:', e);
