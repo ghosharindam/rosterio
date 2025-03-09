@@ -79,7 +79,27 @@ Roster.generate = function() {
       console.error('Error generating Teache-View:', viewError);
       // Don't let Teacher-View errors affect the main roster generation
     }
-    
+
+    // Generate the Standard-Subject View after roster generation
+    try {
+      if (typeof StandardSubjectView !== 'undefined' && typeof StandardSubjectView.generate === 'function') {
+        StandardSubjectView.generate();
+      }
+    } catch (viewError) {
+      console.error('Error generating Standard-Subject View:', viewError);
+      // Don't let Standard-Subject View errors affect the main roster generation
+    }
+
+    // Move the tabs to the end
+    const sheetsToMove = ['Generated-Roster', 'Teacher-View', 'Standard-Subject View'];
+    sheetsToMove.forEach(sheetName => {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+      if (sheet) {
+        SpreadsheetApp.getActiveSpreadsheet().setActiveSheet(sheet);
+        SpreadsheetApp.getActiveSpreadsheet().moveActiveSheet(SpreadsheetApp.getActiveSpreadsheet().getSheets().length);
+      }
+    });
+
   } catch (e) {
     SpreadsheetApp.getActiveSpreadsheet().toast('Error generating roster: ' + e.toString(), 'Error', 30);
     console.error('Roster generation error:', e);
@@ -677,4 +697,4 @@ Roster.ensureMinimumSubjectRequirements = function(
  */
 Roster.getTeachers = function() {
   return Data.loadTeacherSubjects();
-}; 
+};
