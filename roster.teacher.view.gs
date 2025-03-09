@@ -159,9 +159,12 @@ TeacherView.createScheduleTemplate = function(sheet) {
     const headerRow = [];
     headerRow.push('Day/Period'); // First cell is empty
     
-    // Add period numbers as headers
-    for (let i = 0; i < periods.length; i++) {
-      headerRow.push(periods[i].name);
+    // Add period numbers as headers - ensure they always show even if periods array is empty
+    const numPeriods = Math.max(periods.length, 11); // Ensure at least 11 periods (from screenshot)
+    for (let i = 0; i < numPeriods; i++) {
+      const periodName = periods[i] ? periods[i].name : '';
+      // Always show the period number, add name if available
+      headerRow.push(`Period ${i+1}${periodName ? '\n' + periodName : ''}`);
     }
     
     // Set the header row
@@ -175,12 +178,12 @@ TeacherView.createScheduleTemplate = function(sheet) {
     // Create empty cells for schedule
     const emptySchedule = [];
     for (let i = 0; i < days.length; i++) {
-      const row = new Array(periods.length).fill('');
+      const row = new Array(numPeriods).fill('');
       emptySchedule.push(row);
     }
     
     // Set empty cells
-    sheet.getRange(startRow + 1, startCol + 1, days.length, periods.length).setValues(emptySchedule);
+    sheet.getRange(startRow + 1, startCol + 1, days.length, numPeriods).setValues(emptySchedule);
   } catch (error) {
     console.error('Error in createScheduleTemplate:', error);
     // Continue execution, don't throw
@@ -268,27 +271,33 @@ TeacherView.updateTeacherSchedule = function(teacherName) {
     const rosterData = rosterSheet.getDataRange().getValues();
     console.log(`Got roster data with ${rosterData.length} rows from sheet "${rosterSheet.getName()}"`);
     
-    // Get period headers for display
-    const headerRow = rosterData[0];
-    const periodNames = headerRow.slice(2); // Skip class and day columns
-    console.log(`Found ${periodNames.length} periods in header: ${periodNames.join(', ')}`);
+    // Get period headers from the roster or use defaults
+    let periodNames = [];
     
-    // Get periods configuration for schedule layout
-    let periods = [];
-    try {
-      // First try to load from configuration
-      const periodsConfig = Data.loadPeriodsConfig();
-      periods = periodsConfig.activePeriods || [];
-      
-      // If that fails, use the header row
-      if (!periods || periods.length === 0) {
-        throw new Error('No periods from config');
+    // Try to get periods from roster header row
+    if (rosterData.length > 0) {
+      const headerRow = rosterData[0];
+      // Skip class and day columns (first two columns)
+      if (headerRow.length > 2) {
+        periodNames = headerRow.slice(2);
+        console.log(`Found ${periodNames.length} periods in header: ${periodNames.join(', ')}`);
       }
-    } catch (periodsError) {
-      console.log('Using period names from roster header');
-      // Create period objects from header names
-      periods = periodNames.map(name => ({ name: String(name) }));
     }
+    
+    // If no periods found in roster, create default period names
+    if (periodNames.length === 0) {
+      // Use a minimum of 11 periods (based on screenshot)
+      for (let i = 0; i < 11; i++) {
+        periodNames.push(`Period ${i+1}`);
+      }
+      console.log(`Using ${periodNames.length} default period names`);
+    }
+    
+    // Create period objects for schedule layout
+    const periods = periodNames.map((name, index) => ({
+      name: String(name),
+      periodNumber: index + 1
+    }));
     
     console.log(`Using ${periods.length} periods in schedule`);
     
@@ -366,6 +375,9 @@ TeacherView.updateTeacherSchedule = function(teacherName) {
             subject = cellContent.split('(')[0].trim();
           }
           
+          // Include period number with the data for better clarity
+          const periodNumber = periodIndex + 1;
+          
           // Record the exact match with all context
           exactMatches.push({
             rowIndex: rowIndex,
@@ -374,7 +386,8 @@ TeacherView.updateTeacherSchedule = function(teacherName) {
             dayIndex: dayIndex,
             classKey: classKey,
             periodIndex: periodIndex,
-            periodName: periodNames[periodIndex] || `Period ${periodIndex+1}`,
+            periodNumber: periodNumber,
+            periodName: periodNames[periodIndex] || `Period ${periodNumber}`,
             cellContent: cellContent,
             subject: subject
           });
@@ -383,6 +396,7 @@ TeacherView.updateTeacherSchedule = function(teacherName) {
           
           // Also directly add to the schedule
           if (periodIndex >= 0 && periodIndex < periods.length) {
+            // Simplified cell content - removed redundant period number
             scheduleData[dayIndex][periodIndex] = `${subject}\n${classKey}`;
           }
         }
@@ -470,26 +484,12 @@ TeacherView.clearSchedule = function() {
     // Just clear the title in cell A3
     sheet.getRange('A3').setValue('');
     
-    // Get periods configuration with fallback
-    let periods = [];
-    try {
-      const periodsConfig = Data.loadPeriodsConfig();
-      periods = periodsConfig.activePeriods || [];
-    } catch (periodsError) {
-      console.error('Error loading periods config in clearSchedule:', periodsError);
-      // Fallback to a minimum default size
-      periods = [1, 2, 3, 4, 5, 6, 7, 8]; // Assume at least 8 periods as fallback
-    }
-    
     // Standard days
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
     
-    // Clear the schedule cells only if we have valid dimensions
-    const startRow = 5;  // Schedule content starts at row 5
-    const startCol = 2;  // Schedule content starts at column 2
-    
-    // Ensure we have at least one column to clear
-    const numCols = Math.max(1, periods.length);
+    // Determine how many columns to clear
+    const lastCol = Math.max(sheet.getLastColumn(), 12); // Ensure at least 12 columns
+    const numCols = lastCol - 1; // Exclude the first column (days)
     const numRows = days.length;
     
     // Check if the dimensions make sense before proceeding
@@ -505,6 +505,10 @@ TeacherView.clearSchedule = function() {
     for (let i = 0; i < numRows; i++) {
       emptyData.push(new Array(numCols).fill(''));
     }
+    
+    // Clear the schedule cells only if we have valid dimensions
+    const startRow = 5;  // Schedule content starts at row 5
+    const startCol = 2;  // Schedule content starts at column 2
     
     // Set empty data
     sheet.getRange(startRow, startCol, numRows, numCols).setValues(emptyData);
@@ -579,11 +583,16 @@ TeacherView.formatSheet = function(sheet) {
     dropdown.setFontWeight('bold');
     dropdown.setBackground('#e6f2ff');
     
+    // Get columns for headers based on actual data in the sheet
+    const maxCol = Math.max(sheet.getLastColumn(), 12); // Ensure at least 12 columns for periods
+    
     // Format the schedule header row
-    const headerRow = sheet.getRange('A4:Z4'); // Assuming we won't have more than 26 periods
+    const headerRow = sheet.getRange(4, 1, 1, maxCol);
     headerRow.setFontWeight('bold');
     headerRow.setBackground('#d9d9d9');
     headerRow.setHorizontalAlignment('center');
+    headerRow.setVerticalAlignment('middle');
+    headerRow.setWrap(true);
     
     // Format the day column
     const dayCol = sheet.getRange('A5:A9'); // 5 days
@@ -594,25 +603,19 @@ TeacherView.formatSheet = function(sheet) {
     // Set column widths
     sheet.setColumnWidth(1, 120); // Day column
     
-    // Get periods configuration - with fallback
-    let periods = [];
-    try {
-      const periodsConfig = Data.loadPeriodsConfig();
-      periods = periodsConfig.activePeriods || [];
-    } catch (periodsError) {
-      console.error('Error loading periods config:', periodsError);
-    }
-    
-    // Set period column widths
-    for (let i = 0; i < periods.length; i++) {
-      sheet.setColumnWidth(i + 2, 150); // Period columns
+    // Set period column widths - ensure all columns have a reasonable width
+    for (let i = 0; i < maxCol; i++) {
+      sheet.setColumnWidth(i + 1, i === 0 ? 120 : 120); // Day/period columns
     }
     
     // Set row heights
-    sheet.setRowHeight(4, 30); // Header row
+    sheet.setRowHeight(4, 40); // Header row - taller for period numbers and names
     for (let i = 0; i < 5; i++) {
       sheet.setRowHeight(i + 5, 80); // Day rows - taller to accommodate multiple lines
     }
+    
+    // Make sure header row has proper text wrap
+    headerRow.setWrap(true);
   } catch (error) {
     console.error('Error formatting sheet:', error);
     // Continue execution, don't throw
