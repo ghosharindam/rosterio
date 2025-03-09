@@ -48,7 +48,8 @@ Init.Sheets.createPeriodsConfigSheet = function(spreadsheet) {
     ['School End Time', '3:00 PM'],
     ['Period Duration (minutes)', '45'],
     ['Break Duration (minutes)', '15'],
-    ['Lunch Duration (minutes)', '30']
+    ['Lunch Duration (minutes)', '30'],
+    ['Periods per day', '9']
   ];
   
   sheet.getRange(1, 1, config.length, 2).setValues(config);
