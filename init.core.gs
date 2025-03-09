@@ -13,6 +13,12 @@ Init.initializeSheets = function() {
   // First, clear all existing data
   Utils.clearAllData();
   
+  // Delete the Standard-Subject View sheet if it exists
+  const standardSubjectSheet = spreadsheet.getSheetByName('Standard-Subject View');
+  if (standardSubjectSheet) {
+    spreadsheet.deleteSheet(standardSubjectSheet);
+  }
+
   // Create Teacher-Subject-Standard sheet
   Init.Sheets.createTeacherSubjectSheet(spreadsheet);
   
@@ -30,4 +36,4 @@ Init.initializeSheets = function() {
   
   // Show success message
   SpreadsheetApp.getActiveSpreadsheet().toast('All sheets have been initialized successfully.');
-}; 
+};
