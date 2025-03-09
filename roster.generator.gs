@@ -613,6 +613,8 @@ Roster.generateConstraintBasedRoster = function(classes, days, teachers, subject
 
 /**
  * Ensure that all subjects meet their minimum period requirements
+ * Uses a more aggressive approach to ensure minimum requirements are met
+ * 
  * @param {Array} rosterData - The roster data
  * @param {Array} classes - The class data
  * @param {Object} subjectPeriods - The subject period requirements
@@ -664,186 +666,422 @@ Roster.ensureMinimumSubjectRequirements = function(
     classRowIndices[classKey][day] = i;
   }
   
-  // Store unmet requirements to process them in a prioritized order
-  let unmetRequirements = [];
+  // Calculate the subject deficit for each class (how far below minimum requirements)
+  const classSubjectDeficits = {};
   
-  // For each class, check if each subject meets minimum requirements
+  // Track which subjects are over their minimum (excess) for potential replacement
+  const classSubjectExcess = {};
+  
   classes.forEach(classInfo => {
-    const classKey = classKeyMap[classInfo.standard + classInfo.section];
-    const subjects = subjectPeriods[classInfo.standard] || {};
+    // Get the appropriate key format based on class type (regular or special like "XII-Science")
+    let standard = classInfo.standard;
+    let classKey = classKeyMap[classInfo.standard + classInfo.section];
     
+    // Initialize deficit tracking
+    classSubjectDeficits[classKey] = [];
+    classSubjectExcess[classKey] = [];
+    
+    // Get subjects for this standard
+    const subjects = subjectPeriods[standard] || {};
+    
+    // Calculate deficit/excess for each subject
     Object.keys(subjects).forEach(subject => {
       const subjectConfig = subjects[subject];
       const currentCount = classSubjectCounts[classKey][subject] || 0;
+      const minRequired = subjectConfig.minPerWeek;
       
-      // If we haven't met the minimum requirement
-      if (currentCount < subjectConfig.minPerWeek) {
-        const needed = subjectConfig.minPerWeek - currentCount;
-        
-        // Add to unmet requirements list
-        unmetRequirements.push({
-          classInfo: classInfo,
-          classKey: classKey,
+      if (currentCount < minRequired) {
+        // Subject has a deficit (below minimum)
+        classSubjectDeficits[classKey].push({
           subject: subject,
-          subjectConfig: subjectConfig,
-          needed: needed,
-          priority: needed * (subjectConfig.minPerWeek / subjectConfig.maxPerWeek) // Higher priority for more critical shortfalls
+          deficit: minRequired - currentCount,
+          minPerWeek: minRequired,
+          maxPerDay: subjectConfig.maxPerDay,
+          priority: (minRequired - currentCount) * (minRequired / 10) // Higher priority for larger deficits and higher requirements
+        });
+      } else if (currentCount > minRequired) {
+        // Subject has an excess (above minimum)
+        classSubjectExcess[classKey].push({
+          subject: subject,
+          excess: currentCount - minRequired,
+          minPerWeek: minRequired
         });
       }
+    });
+    
+    // Sort deficits by priority (highest first) - classes with larger deficits and higher min requirements first
+    classSubjectDeficits[classKey].sort((a, b) => b.priority - a.priority);
+  });
+  
+  // Log the deficits for debugging
+  console.log("Class subject deficits:", JSON.stringify(classSubjectDeficits));
+  
+  // Track changes made during optimization
+  let totalChanges = 0;
+  let totalDeficits = 0;
+  
+  // Count total deficits for reporting
+  Object.values(classSubjectDeficits).forEach(deficits => {
+    deficits.forEach(deficit => {
+      totalDeficits += deficit.deficit;
     });
   });
   
-  // Sort requirements by priority (highest priority first)
-  unmetRequirements.sort((a, b) => b.priority - a.priority);
+  console.log(`Total subject deficits before optimization: ${totalDeficits}`);
   
-  // Process each unmet requirement
-  for (const req of unmetRequirements) {
-    let filled = 0;
-    const { classInfo, classKey, subject, needed } = req;
+  // PHASE 1: Fill empty slots for subjects with deficits
+  
+  // Process classes that have deficits
+  Object.keys(classSubjectDeficits).forEach(classKey => {
+    if (classSubjectDeficits[classKey].length === 0) return; // Skip classes with no deficits
     
-    // Create a map to track which day-period combinations have been checked
-    const checkedSlots = {};
-    days.forEach(day => {
-      checkedSlots[day] = {};
-    });
+    // Get the class info
+    const classKeyComponents = classKey.split('-');
+    let standardName, section;
     
-    // First pass: try to replace empty slots or other non-critical subjects
-    for (let dayIndex = 0; dayIndex < days.length && filled < needed; dayIndex++) {
-      const day = days[dayIndex];
-      const rowIndex = classRowIndices[classKey]?.[day];
-      
-      if (rowIndex === undefined) continue;
-      
-      // Check each period
-      for (let col = 2; col < rosterData[rowIndex].length && filled < needed; col++) {
-        // Skip break and lunch
-        if (col === breakColumn - 1 || col === lunchColumn - 1) continue;
-        
-        // Mark this slot as checked
-        checkedSlots[day][col] = true;
-        
-        // Try to replace an empty slot first
-        if (!rosterData[rowIndex][col]) {
-          if (tryAssignTeacher(rowIndex, col, day, classInfo, classKey, subject, req.subjectConfig)) {
-            filled++;
-          }
-        }
-      }
+    // Handle different class key formats
+    if (classKeyComponents.length === 2) {
+      // Simple format: "Standard-Section"
+      standardName = classKeyComponents[0];
+      section = classKeyComponents[1];
+    } else if (classKeyComponents.length === 3) {
+      // Complex format: "Standard-Type-Section"
+      standardName = classKeyComponents[0] + '-' + classKeyComponents[1];
+      section = classKeyComponents[2];
+    } else {
+      // Fallback
+      standardName = classKeyComponents[0];
+      section = classKeyComponents[1] || 'A';
     }
     
-    // If we still haven't filled enough slots, try more aggressive replacement
-    if (filled < needed) {
-      // Get the day with the most available teachers for this subject
-      const dayAvailability = {};
-      days.forEach(day => {
-        dayAvailability[day] = { 
-          available: 0,
-          teachers: [] 
-        };
-        
-        // CORRECTED: We're no longer checking day-level conflicts
-        // Just collect all teachers who can teach this subject and standard
-        const potentialTeachers = (teachersBySubject[subject] || []).filter(teacher => {
-          return teacherStandardMap[teacher.name][classInfo.standard]; 
-        });
-        
-        dayAvailability[day].available = potentialTeachers.length;
-        dayAvailability[day].teachers = potentialTeachers;
-      });
+    // Find the class info object matching this standard and section
+    const classInfo = classes.find(c => 
+      (c.standard === standardName && c.section === section) ||
+      (c.standard + c.section === standardName + section)
+    );
+    
+    if (!classInfo) {
+      console.log(`Could not find class info for ${classKey}`);
+      return;
+    }
+    
+    // Process deficits for this class
+    classSubjectDeficits[classKey].forEach(deficitInfo => {
+      const { subject, deficit } = deficitInfo;
+      let filledCount = 0;
       
-      // Sort days by availability (most available teachers first)
-      const sortedDays = days.slice().sort((a, b) => 
-        dayAvailability[b].available - dayAvailability[a].available
-      );
-      
-      // Try to replace non-critical subject periods if we can't find empty slots
-      for (const day of sortedDays) {
-        if (filled >= needed) break;
-        
+      // Try to fill empty slots first
+      for (let dayIndex = 0; dayIndex < days.length && filledCount < deficit; dayIndex++) {
+        const day = days[dayIndex];
         const rowIndex = classRowIndices[classKey]?.[day];
+        
         if (rowIndex === undefined) continue;
         
-        // Only consider days with available teachers
-        if (dayAvailability[day].available === 0) continue;
-        
-        // Check each period for potential replacements
-        for (let col = 2; col < rosterData[rowIndex].length && filled < needed; col++) {
-          // Skip if already checked, or break/lunch
-          if (checkedSlots[day][col] || col === breakColumn - 1 || col === lunchColumn - 1) continue;
+        // Check each period in this day
+        for (let col = 2; col < rosterData[rowIndex].length && filledCount < deficit; col++) {
+          // Skip break and lunch columns
+          if (col === breakColumn - 1 || col === lunchColumn - 1) continue;
           
-          // Mark as checked
-          checkedSlots[day][col] = true;
-          
-          const currentCell = rosterData[rowIndex][col];
-          
-          // Skip if already the subject we want
-          if (currentCell && currentCell.startsWith(subject + '\n')) continue;
-          
-          // If cell has content, evaluate if we can replace it
-          if (currentCell && currentCell !== 'BREAK' && currentCell !== 'LUNCH') {
-            // Extract current subject
-            const currentSubject = currentCell.split('\n')[0];
-            const currentTeacher = currentCell.match(/\((.*?)\)$/)?.[1];
-            
-            if (!currentSubject || !currentTeacher) continue;
-            
-            // Check if current subject is already at or above its minimum
-            const currentSubjectConfig = subjectPeriods[classInfo.standard]?.[currentSubject];
-            if (!currentSubjectConfig) continue;
-            
-            const currentSubjectCount = classSubjectCounts[classKey][currentSubject] || 0;
-            
-            // Only replace if current subject is already meeting minimum requirements
-            if (currentSubjectCount > currentSubjectConfig.minPerWeek) {
-              // Remove current assignment
-              if (currentTeacher) {
-                delete teacherAssignments[day][col][currentTeacher];
-                teacherAssignmentCounts[currentTeacher]--;
-                classSubjectCounts[classKey][currentSubject]--;
-                
-                // Update subject-teacher mapping
-                if (classSubjectTeacherMap[classKey][currentSubject][currentTeacher]) {
-                  classSubjectTeacherMap[classKey][currentSubject][currentTeacher]--;
-                }
-              }
-              
-              // Try to assign a teacher for our target subject
-              if (tryAssignTeacher(rowIndex, col, day, classInfo, classKey, subject, req.subjectConfig)) {
-                filled++;
-              } else {
-                // If we couldn't assign a new teacher, restore the original assignment
-                rosterData[rowIndex][col] = currentCell;
-                if (currentTeacher) {
-                  teacherAssignments[day][col][currentTeacher] = classKey;
-                  teacherAssignmentCounts[currentTeacher]++;
-                  classSubjectCounts[classKey][currentSubject]++;
-                  
-                  // Update subject-teacher mapping
-                  if (!classSubjectTeacherMap[classKey][currentSubject][currentTeacher]) {
-                    classSubjectTeacherMap[classKey][currentSubject][currentTeacher] = 0;
-                  }
-                  classSubjectTeacherMap[classKey][currentSubject][currentTeacher]++;
-                }
-              }
+          // Try to fill empty slots first
+          if (!rosterData[rowIndex][col]) {
+            // Check if we can assign within maxPerDay constraint
+            if ((subjectDayCounts[classKey][subject][day] || 0) >= deficitInfo.maxPerDay) {
+              continue; // Skip - already at max for this day
             }
-          } 
-          // Empty slot - try to assign a teacher
-          else if (!currentCell) {
-            if (tryAssignTeacher(rowIndex, col, day, classInfo, classKey, subject, req.subjectConfig)) {
-              filled++;
+            
+            if (tryAssignTeacher(rowIndex, col, day, classInfo, classKey, subject, deficitInfo)) {
+              filledCount++;
+              totalChanges++;
             }
           }
         }
       }
+      
+      // Update the deficit after filling empty slots
+      classSubjectDeficits[classKey].find(d => d.subject === subject).deficit -= filledCount;
+    });
+  });
+  
+  // PHASE 2: Replace less critical subjects if still have deficits
+  
+  // For each class with remaining deficits, try to replace periods from subjects with excess
+  Object.keys(classSubjectDeficits).forEach(classKey => {
+    // Filter to only subjects still with deficits
+    const remainingDeficits = classSubjectDeficits[classKey].filter(d => d.deficit > 0);
+    if (remainingDeficits.length === 0) return; // Skip if no deficits remain
+    
+    // Get class info
+    const classKeyComponents = classKey.split('-');
+    let standardName, section;
+    
+    // Handle different class key formats
+    if (classKeyComponents.length === 2) {
+      standardName = classKeyComponents[0];
+      section = classKeyComponents[1];
+    } else if (classKeyComponents.length === 3) {
+      standardName = classKeyComponents[0] + '-' + classKeyComponents[1];
+      section = classKeyComponents[2];
+    } else {
+      standardName = classKeyComponents[0];
+      section = classKeyComponents[1] || 'A';
     }
     
-    // If we still couldn't fill all slots, log it
-    if (filled < needed) {
-      console.warn(`Could not meet minimum requirements for ${subject} in class ${classKey}: needed ${needed} more, filled ${filled}`);
-    } else {
-      console.log(`Successfully filled minimum requirements for ${subject} in class ${classKey}`);
-    }
+    const classInfo = classes.find(c => 
+      (c.standard === standardName && c.section === section) ||
+      (c.standard + c.section === standardName + section)
+    );
+    
+    if (!classInfo) return;
+    
+    // Sort excess subjects by excess amount (most excess first)
+    const excessSubjects = classSubjectExcess[classKey].sort((a, b) => b.excess - a.excess);
+    
+    // For each deficit subject
+    remainingDeficits.forEach(deficitInfo => {
+      const { subject, deficit } = deficitInfo;
+      let filledCount = 0;
+      
+      // Try to replace subjects with excess
+      for (let dayIndex = 0; dayIndex < days.length && filledCount < deficit; dayIndex++) {
+        const day = days[dayIndex];
+        const rowIndex = classRowIndices[classKey]?.[day];
+        
+        if (rowIndex === undefined) continue;
+        
+        // Calculate how many periods we can still allocate on this day
+        const currentDayCount = subjectDayCounts[classKey][subject][day] || 0;
+        const maxMoreOnThisDay = deficitInfo.maxPerDay - currentDayCount;
+        
+        if (maxMoreOnThisDay <= 0) continue; // Skip this day if already at max
+        
+        // Check each period
+        for (let col = 2; col < rosterData[rowIndex].length && filledCount < deficit; col++) {
+          // Skip if already filled maxPerDay for this subject on this day
+          if (filledCount >= maxMoreOnThisDay) break;
+          
+          // Skip break and lunch columns
+          if (col === breakColumn - 1 || col === lunchColumn - 1) continue;
+          
+          // Skip empty slots (these were tried in Phase 1)
+          if (!rosterData[rowIndex][col]) continue;
+          
+          // Get the current subject in this slot
+          const currentCellValue = rosterData[rowIndex][col];
+          if (currentCellValue === 'BREAK' || currentCellValue === 'LUNCH') continue;
+          
+          // Extract current subject and teacher
+          const currentMatches = currentCellValue.match(/^(.+)\n\((.+)\)$/);
+          if (!currentMatches || currentMatches.length < 3) continue;
+          
+          const currentSubject = currentMatches[1].trim();
+          const currentTeacher = currentMatches[2].trim();
+          
+          // Skip if this is already the deficit subject
+          if (currentSubject === subject) continue;
+          
+          // Check if current subject has excess we can use
+          const excessSubject = excessSubjects.find(e => e.subject === currentSubject && e.excess > 0);
+          if (!excessSubject) continue;
+          
+          // Try to replace this period with our deficit subject
+          // First, remove the current assignment
+          delete teacherAssignments[day][col][currentTeacher];
+          teacherAssignmentCounts[currentTeacher]--;
+          classSubjectCounts[classKey][currentSubject]--;
+          
+          // Decrement subject-day count
+          if (subjectDayCounts[classKey][currentSubject][day] > 0) {
+            subjectDayCounts[classKey][currentSubject][day]--;
+          }
+          
+          // Update teacher-subject mapping
+          if (classSubjectTeacherMap[classKey][currentSubject][currentTeacher] > 0) {
+            classSubjectTeacherMap[classKey][currentSubject][currentTeacher]--;
+          }
+          
+          // Try to assign our deficit subject
+          if (tryAssignTeacher(rowIndex, col, day, classInfo, classKey, subject, deficitInfo)) {
+            filledCount++;
+            totalChanges++;
+            
+            // Update the excess tracking
+            excessSubject.excess--;
+          } else {
+            // If we couldn't assign the deficit subject, restore the original
+            rosterData[rowIndex][col] = currentCellValue;
+            teacherAssignments[day][col][currentTeacher] = classKey;
+            teacherAssignmentCounts[currentTeacher]++;
+            classSubjectCounts[classKey][currentSubject]++;
+            
+            // Restore subject-day count
+            if (!subjectDayCounts[classKey][currentSubject][day]) {
+              subjectDayCounts[classKey][currentSubject][day] = 0;
+            }
+            subjectDayCounts[classKey][currentSubject][day]++;
+            
+            // Restore teacher-subject mapping
+            if (!classSubjectTeacherMap[classKey][currentSubject][currentTeacher]) {
+              classSubjectTeacherMap[classKey][currentSubject][currentTeacher] = 0;
+            }
+            classSubjectTeacherMap[classKey][currentSubject][currentTeacher]++;
+          }
+        }
+      }
+      
+      // Update the deficit after filling
+      deficitInfo.deficit -= filledCount;
+    });
+  });
+  
+  // PHASE 3: Last resort - try to swap with any subject if we still have deficits
+  // This is more aggressive and will try to reach minimums at all costs
+  
+  // Calculate remaining deficits
+  let remainingDeficits = 0;
+  Object.values(classSubjectDeficits).forEach(deficits => {
+    deficits.forEach(deficit => {
+      remainingDeficits += deficit.deficit;
+    });
+  });
+  
+  console.log(`After initial optimization, remaining deficits: ${remainingDeficits}`);
+  
+  // Only enter Phase 3 if we still have deficits and haven't made too many changes yet
+  if (remainingDeficits > 0 && totalChanges < 100) { // Limit total changes to avoid excessive computation
+    // Process remaining deficits more aggressively
+    Object.keys(classSubjectDeficits).forEach(classKey => {
+      // Get only subjects still with deficits
+      const criticalDeficits = classSubjectDeficits[classKey].filter(d => d.deficit > 0);
+      if (criticalDeficits.length === 0) return;
+      
+      // Get class info (same as before)
+      const classKeyComponents = classKey.split('-');
+      let standardName, section;
+      
+      if (classKeyComponents.length === 2) {
+        standardName = classKeyComponents[0];
+        section = classKeyComponents[1];
+      } else if (classKeyComponents.length === 3) {
+        standardName = classKeyComponents[0] + '-' + classKeyComponents[1];
+        section = classKeyComponents[2];
+      } else {
+        standardName = classKeyComponents[0];
+        section = classKeyComponents[1] || 'A';
+      }
+      
+      const classInfo = classes.find(c => 
+        (c.standard === standardName && c.section === section) ||
+        (c.standard + c.section === standardName + section)
+      );
+      
+      if (!classInfo) return;
+      
+      // For each critical deficit subject
+      criticalDeficits.forEach(deficitInfo => {
+        const { subject, deficit } = deficitInfo;
+        let filledCount = 0;
+        
+        // Now try replacing ANY subject (not just excess ones)
+        for (let dayIndex = 0; dayIndex < days.length && filledCount < deficit; dayIndex++) {
+          const day = days[dayIndex];
+          const rowIndex = classRowIndices[classKey]?.[day];
+          
+          if (rowIndex === undefined) continue;
+          
+          // Skip days where we already have max per day
+          const currentDayCount = subjectDayCounts[classKey][subject][day] || 0;
+          if (currentDayCount >= deficitInfo.maxPerDay) continue;
+          
+          // Calculate how many more we can add to this day
+          const maxMoreOnThisDay = deficitInfo.maxPerDay - currentDayCount;
+          
+          for (let col = 2; col < rosterData[rowIndex].length && filledCount < deficit; col++) {
+            // Skip if already filled maxPerDay for this subject on this day
+            if (filledCount >= maxMoreOnThisDay) break;
+            
+            // Skip break and lunch columns
+            if (col === breakColumn - 1 || col === lunchColumn - 1) continue;
+            
+            // Skip empty slots (these were tried earlier)
+            if (!rosterData[rowIndex][col]) continue;
+            
+            // Get current cell value
+            const currentCellValue = rosterData[rowIndex][col];
+            if (currentCellValue === 'BREAK' || currentCellValue === 'LUNCH') continue;
+            
+            // Extract current subject and teacher
+            const currentMatches = currentCellValue.match(/^(.+)\n\((.+)\)$/);
+            if (!currentMatches || currentMatches.length < 3) continue;
+            
+            const currentSubject = currentMatches[1].trim();
+            const currentTeacher = currentMatches[2].trim();
+            
+            // Skip if this is already the deficit subject
+            if (currentSubject === subject) continue;
+            
+            // Don't replace subjects that would fall below their minimum
+            const currentSubjectConfig = subjectPeriods[standardName]?.[currentSubject];
+            if (currentSubjectConfig) {
+              const currentCount = classSubjectCounts[classKey][currentSubject] || 0;
+              // Only replace if it won't push this subject below its minimum
+              if (currentCount <= currentSubjectConfig.minPerWeek) continue;
+            }
+            
+            // Try to replace with our deficit subject
+            delete teacherAssignments[day][col][currentTeacher];
+            teacherAssignmentCounts[currentTeacher]--;
+            classSubjectCounts[classKey][currentSubject]--;
+            
+            // Decrement subject-day count
+            if (subjectDayCounts[classKey][currentSubject][day] > 0) {
+              subjectDayCounts[classKey][currentSubject][day]--;
+            }
+            
+            // Update teacher-subject mapping
+            if (classSubjectTeacherMap[classKey][currentSubject][currentTeacher] > 0) {
+              classSubjectTeacherMap[classKey][currentSubject][currentTeacher]--;
+            }
+            
+            if (tryAssignTeacher(rowIndex, col, day, classInfo, classKey, subject, deficitInfo)) {
+              filledCount++;
+              totalChanges++;
+            } else {
+              // Restore original if we couldn't assign
+              rosterData[rowIndex][col] = currentCellValue;
+              teacherAssignments[day][col][currentTeacher] = classKey;
+              teacherAssignmentCounts[currentTeacher]++;
+              classSubjectCounts[classKey][currentSubject]++;
+              
+              // Restore subject-day count
+              if (!subjectDayCounts[classKey][currentSubject][day]) {
+                subjectDayCounts[classKey][currentSubject][day] = 0;
+              }
+              subjectDayCounts[classKey][currentSubject][day]++;
+              
+              // Restore teacher-subject mapping
+              if (!classSubjectTeacherMap[classKey][currentSubject][currentTeacher]) {
+                classSubjectTeacherMap[classKey][currentSubject][currentTeacher] = 0;
+              }
+              classSubjectTeacherMap[classKey][currentSubject][currentTeacher]++;
+            }
+          }
+        }
+        
+        // Update the deficit
+        deficitInfo.deficit -= filledCount;
+      });
+    });
   }
+  
+  // Calculate final deficits
+  let finalDeficits = 0;
+  Object.values(classSubjectDeficits).forEach(deficits => {
+    deficits.forEach(deficit => {
+      finalDeficits += deficit.deficit;
+    });
+  });
+  
+  console.log(`Final optimization results: Made ${totalChanges} changes, reduced deficits from ${totalDeficits} to ${finalDeficits}`);
   
   // Helper function to try to assign a teacher for a subject in a specific slot
   function tryAssignTeacher(rowIndex, col, day, classInfo, classKey, subject, subjectConfig) {

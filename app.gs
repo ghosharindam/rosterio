@@ -10,7 +10,8 @@ const SHEET_NAMES = {
   TEACHER_SUBJECTS: 'Teacher-Subjects',
   PERIODS_CONFIG: 'Periods-Configuration',
   CLASS_CONFIG: 'Class-Configuration',
-  SUBJECT_PERIODS: 'Subject-Periods'
+  SUBJECT_PERIODS: 'Subject-Periods',
+  SCHEDDULE_CONFLICTS: 'Schedule-Conflicts'
 };
 
 // Global API functions that are exposed to the menu

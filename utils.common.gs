@@ -67,6 +67,12 @@ Utils.clearAllData = function() {
   if (teacherViewSheet) {
     spreadsheet.deleteSheet(teacherViewSheet);
   }
+
+  // Also delete the Schedule-Conflicy sheet if it exists
+  const scheduleConflictSheet = spreadsheet.getSheetByName('Schedule-Conflicts');
+  if (scheduleConflictSheet) {
+    spreadsheet.deleteSheet(scheduleConflictSheet);
+  }
   
   // Remove any other sheets that might have been generated
   const generatedRosterPattern = /^Generated-Roster/;
@@ -76,8 +82,7 @@ Utils.clearAllData = function() {
     if (generatedRosterPattern.test(sheetName) && !Object.values(SHEET_NAMES).includes(sheetName)) {
       spreadsheet.deleteSheet(sheet);
     }
-  });
-  
+  });  
   // Show success message
   SpreadsheetApp.getActiveSpreadsheet().toast('All data has been cleared successfully.');
 }; 
