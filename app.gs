@@ -74,3 +74,16 @@ function validateSchedule() {
     );
   }
 }
+
+/**
+ * Global function to iterate on the existing roster to improve it
+ * Called when "Iterate Roster" is clicked in the menu
+ */
+function iterateRoster() {
+  try {
+    Roster.iterateExistingRoster();
+  } catch (e) {
+    console.error('Error iterating roster:', e);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Error: ' + e.message, 'Iteration Failed', 10);
+  }
+}

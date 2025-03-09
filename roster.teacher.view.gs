@@ -11,14 +11,34 @@ var TeacherView = TeacherView || {};
 TeacherView.createTeacherView = function() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = ss.getSheetByName('Teacher-View');
     
-    // If the sheet doesn't exist, create it
-    if (!sheet) {
-      sheet = ss.insertSheet('Teacher-View');
-    } else {
+    // Save the current selected teacher if view already exists
+    let currentSelectedTeacher = null;
+    let sheet = ss.getSheetByName('Teacher-View');
+    if (sheet) {
+      try {
+        // Try to get the currently selected teacher from the dropdown
+        const dropdown = sheet.getRange('C1');
+        const dataValidation = dropdown.getDataValidation();
+        if (dataValidation) {
+          const selectedIndex = dropdown.getValue();
+          const criteria = dataValidation.getCriteriaValues();
+          if (criteria && criteria.length > 0 && criteria[0].length > 0) {
+            const teachersList = criteria[0];
+            if (selectedIndex >= 1 && selectedIndex <= teachersList.length) {
+              currentSelectedTeacher = teachersList[selectedIndex - 1];
+            }
+          }
+        }
+      } catch (e) {
+        console.log("Couldn't retrieve currently selected teacher:", e);
+      }
+      
       // Clear existing content if sheet already exists
       sheet.clear();
+    } else {
+      // If the sheet doesn't exist, create it
+      sheet = ss.insertSheet('Teacher-View');
     }
     
     // Add instructions
@@ -40,6 +60,30 @@ TeacherView.createTeacherView = function() {
         
         // Add dropdown change trigger
         TeacherView.setupDropdownTrigger();
+        
+        // If we had a previously selected teacher, try to restore it
+        if (currentSelectedTeacher) {
+          console.log(`Attempting to restore previously selected teacher: ${currentSelectedTeacher}`);
+          const teacherIndex = teachers.indexOf(currentSelectedTeacher);
+          
+          if (teacherIndex >= 0) {
+            // Select the teacher in the dropdown (1-indexed for dropdown)
+            sheet.getRange('C1').setValue(teacherIndex + 1);
+            
+            // Update the view with that teacher
+            console.log(`Restoring view for teacher: ${currentSelectedTeacher}`);
+            setTimeout(function() {
+              TeacherView.updateTeacherSchedule(currentSelectedTeacher);
+            }, 500);
+          } else {
+            console.log(`Previously selected teacher "${currentSelectedTeacher}" not found in current list`);
+            // Default to first teacher
+            TeacherView.updateTeacherSchedule(teachers[0]);
+          }
+        } else {
+          // Default to first teacher
+          TeacherView.updateTeacherSchedule(teachers[0]);
+        }
       } else {
         // Handle case when no teachers are available
         sheet.getRange('C1').setValue('No teachers available');
@@ -48,14 +92,14 @@ TeacherView.createTeacherView = function() {
     } catch (teacherError) {
       console.error('Error loading teachers:', teacherError);
       sheet.getRange('C1').setValue('Error loading teachers');
-      sheet.getRange('A3').setValue('Error loading teacher data. Please check configuration.');
+      sheet.getRange('A3').setValue('Error: ' + teacherError.message);
     }
     
     return sheet;
-  } catch (error) {
-    console.error('Error in createTeacherView:', error);
-    SpreadsheetApp.getActiveSpreadsheet().toast('Error creating Teacher-View: ' + error.message, 'Error', 10);
-    throw error;
+  } catch (e) {
+    console.error('Error creating Teacher-View:', e);
+    // Don't re-throw so that roster generation can continue
+    return null;
   }
 };
 
@@ -663,7 +707,7 @@ function handleTeacherViewDropdown(e) {
 }
 
 /**
- * Generate the Teacher-View after roster generation
+ * Generate Teacher-View after roster has been created or updated
  */
 TeacherView.generateAfterRoster = function() {
   try {
@@ -671,6 +715,18 @@ TeacherView.generateAfterRoster = function() {
     
     // Add a small delay to ensure roster data is fully saved
     Utilities.sleep(1000);
+    
+    // Force reset the roster sheet cache to ensure we get the latest data
+    TeacherView.rosterSheetName = null;
+    
+    // Force a check for the roster sheet to ensure we're using the latest
+    if (!TeacherView.checkRosterSheet()) {
+      console.error('Could not find roster sheet for Teacher-View generation');
+      SpreadsheetApp.getActiveSpreadsheet().toast('Error: Could not find roster sheet. Teacher-View was not updated.', 'Error', 5);
+      return null;
+    }
+    
+    console.log(`Teacher-View will use roster sheet: ${TeacherView.rosterSheetName}`);
     
     // Create or update the Teacher-View
     const sheet = TeacherView.createTeacherView();
@@ -699,11 +755,12 @@ TeacherView.generateAfterRoster = function() {
     // Try to show an error message to the user
     try {
       SpreadsheetApp.getActiveSpreadsheet().toast('Error updating Teacher-View: ' + e.message, 'Error', 10);
-    } catch (toastError) {
-      console.error('Could not show error toast:', toastError);
+    } catch(toastError) {
+      // Just log if we can't even show a toast
+      console.error("Could not show error toast:", toastError);
     }
     
-    return null; // Return null instead of throwing to prevent breaking roster generation
+    return null;
   }
 };
 
@@ -743,7 +800,17 @@ TeacherView.checkRosterSheet = function() {
     const sheets = ss.getSheets();
     let rosterSheet = null;
     
-    // First try to find a sheet named "Roster"
+    // First try to find a sheet with the standard name from constants
+    if (typeof SHEET_NAMES !== 'undefined' && SHEET_NAMES.ROSTER) {
+      rosterSheet = ss.getSheetByName(SHEET_NAMES.ROSTER);
+      if (rosterSheet) {
+        console.log(`Found roster sheet using SHEET_NAMES.ROSTER: "${SHEET_NAMES.ROSTER}"`);
+        TeacherView.rosterSheetName = SHEET_NAMES.ROSTER;
+        return true;
+      }
+    }
+    
+    // Then try to find a sheet named "Roster"
     rosterSheet = ss.getSheetByName('Roster');
     
     // If not found, try to find a sheet with "roster" in the name (case insensitive)
@@ -771,51 +838,46 @@ TeacherView.checkRosterSheet = function() {
           continue;
         }
         
-        // Check the header row for roster-like structure
-        const sheet = sheets[i];
-        if (sheet.getLastRow() >= 3 && sheet.getLastColumn() >= 3) {
-          const headerRow = sheet.getRange(1, 1, 1, 3).getValues()[0];
-          const firstThreeHeaders = headerRow.map(h => String(h).toLowerCase());
+        // Try to analyze this sheet to see if it looks like a roster
+        try {
+          const sheet = sheets[i];
+          const data = sheet.getDataRange().getValues();
           
-          // Check if headers look like a roster (has class and day info)
-          if (firstThreeHeaders.some(h => h.includes('class') || h.includes('section') || h.includes('standard')) &&
-              firstThreeHeaders.some(h => h.includes('day') || h.includes('date'))) {
-            rosterSheet = sheet;
-            console.log(`Found sheet that looks like a roster: ${sheet.getName()}`);
-            break;
+          // Check if first row has "Class" and "Day" headers
+          if (data.length > 0 && data[0].length >= 2) {
+            const firstCell = String(data[0][0]).toLowerCase();
+            const secondCell = String(data[0][1]).toLowerCase();
+            
+            // Look for Class and Day columns
+            if ((firstCell.includes('class') && secondCell.includes('day')) ||
+                (data.length > 1 && 
+                 data[1].length >= 2 &&
+                 String(data[1][0]).length > 0 && 
+                 String(data[1][1]).length > 0 &&
+                 ['monday','tuesday','wednesday','thursday','friday'].includes(String(data[1][1]).toLowerCase()))) {
+              
+              rosterSheet = sheet;
+              console.log(`Found roster-like sheet: ${sheet.getName()}`);
+              break;
+            }
           }
+        } catch (analyzeError) {
+          console.error(`Error analyzing sheet ${sheets[i].getName()}:`, analyzeError);
+          // Continue checking other sheets
         }
       }
     }
     
-    // Check if we found a sheet
-    if (!rosterSheet) {
-      console.error('No roster sheet found after checking all sheets');
-      return false;
+    // If we found a roster sheet, store its name and return true
+    if (rosterSheet) {
+      TeacherView.rosterSheetName = rosterSheet.getName();
+      return true;
     }
     
-    console.log(`Using sheet "${rosterSheet.getName()}" as roster`);
-    
-    // Check if the sheet has data
-    const dataRange = rosterSheet.getDataRange();
-    const rowCount = dataRange.getNumRows();
-    const colCount = dataRange.getNumColumns();
-    
-    console.log(`Roster sheet found with ${rowCount} rows and ${colCount} columns`);
-    
-    // Minimum requirements: at least 3 rows (header + filter + data) and 3 columns (class, day, period1)
-    if (rowCount < 3 || colCount < 3) {
-      console.error(`Roster sheet has insufficient data: ${rowCount} rows, ${colCount} columns`);
-      return false;
-    }
-    
-    // Store a reference to the found roster sheet in a property for future use
-    TeacherView.rosterSheetName = rosterSheet.getName();
-    
-    // The sheet exists and has some data
-    return true;
+    // No roster sheet found
+    return false;
   } catch (error) {
-    console.error('Error checking Roster sheet:', error);
+    console.error('Error checking roster sheet:', error);
     return false;
   }
 };

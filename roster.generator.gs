@@ -405,11 +405,10 @@ Roster.generateConstraintBasedRoster = function(classes, days, teachers, subject
           continue;
         }
         
-        // NEW: Increase priority for subjects that have not met minimum requirements
+        // NEW: Calculate how far from min and max requirements
         const currentCount = classSubjectCounts[classKey][subject] || 0;
-        
-        // Calculate how far this subject is from meeting its minimum
-        const remaining = subjectConfig.minPerWeek - currentCount;
+        const remainingToMin = Math.max(0, subjectConfig.minPerWeek - currentCount);
+        const remainingToMax = subjectConfig.maxPerWeek - currentCount;
         
         // Give preference to the subject from the previous period
         const isPreviousSubject = (subject === previousSubject) ? 1 : 0;
@@ -423,13 +422,26 @@ Roster.generateConstraintBasedRoster = function(classes, days, teachers, subject
         
         // Only add if we have available teachers
         if (availableTeachers > 0) {
+          // NEW: Calculate priority with stronger weight for subjects below minimum
+          let priority = 0;
+          
+          // High priority for subjects that are below minimum requirements
+          if (remainingToMin > 0) {
+            // Higher priority for subjects far from minimum
+            priority = remainingToMin * 10;
+          } else {
+            // Lower priority for subjects already at or above minimum
+            // Use inverse of distance to maximum to ensure subjects close to max get lower priority
+            priority = Math.max(0, 5 - (subjectConfig.maxPerWeek - currentCount));
+          }
+          
           availableSubjects.push({
             name: subject,
-            remaining: remaining, // How far from meeting minimum
-            isPreviousSubject: isPreviousSubject, // Prioritize continuation
+            remainingToMin: remainingToMin,
+            remainingToMax: remainingToMax,
+            isPreviousSubject: isPreviousSubject,
             config: subjectConfig,
-            // NEW: Give higher priority to subjects that need to meet minimums
-            priority: remaining > 0 ? remaining * 2 : 0
+            priority: priority
           });
         }
       }
@@ -439,20 +451,23 @@ Roster.generateConstraintBasedRoster = function(classes, days, teachers, subject
         // MODIFIED: Sort subjects by:
         // 1. Continuity from previous period
         // 2. Higher priority for subjects below minimum requirements
-        // 3. How far they are from meeting minimum requirements
+        // 3. Remaining distance to minimum requirements
         availableSubjects.sort((a, b) => {
           // First prioritize subjects that continue from the previous period
           if (a.isPreviousSubject !== b.isPreviousSubject) {
             return b.isPreviousSubject - a.isPreviousSubject;
           }
           
-          // Then prioritize subjects that haven't met minimums
-          if ((a.remaining > 0) !== (b.remaining > 0)) {
-            return b.remaining > 0 ? 1 : -1;
+          // Then prioritize subjects that haven't met minimums vs those that have
+          const aIsBelowMin = a.remainingToMin > 0;
+          const bIsBelowMin = b.remainingToMin > 0;
+          
+          if (aIsBelowMin !== bIsBelowMin) {
+            return aIsBelowMin ? -1 : 1; // Subjects below minimum get higher priority
           }
           
-          // Finally sort by priority and how far from meeting requirements
-          return (b.priority + b.remaining) - (a.priority + a.remaining);
+          // Finally sort by priority score
+          return b.priority - a.priority;
         });
         
         let assigned = false;
@@ -772,18 +787,18 @@ Roster.ensureMinimumSubjectRequirements = function(
       
       // Try to fill empty slots first
       for (let dayIndex = 0; dayIndex < days.length && filledCount < deficit; dayIndex++) {
-        const day = days[dayIndex];
-        const rowIndex = classRowIndices[classKey]?.[day];
-        
-        if (rowIndex === undefined) continue;
-        
+          const day = days[dayIndex];
+          const rowIndex = classRowIndices[classKey]?.[day];
+          
+          if (rowIndex === undefined) continue;
+          
         // Check each period in this day
         for (let col = 2; col < rosterData[rowIndex].length && filledCount < deficit; col++) {
           // Skip break and lunch columns
-          if (col === breakColumn - 1 || col === lunchColumn - 1) continue;
-          
+            if (col === breakColumn - 1 || col === lunchColumn - 1) continue;
+            
           // Try to fill empty slots first
-          if (!rosterData[rowIndex][col]) {
+            if (!rosterData[rowIndex][col]) {
             // Check if we can assign within maxPerDay constraint
             if ((subjectDayCounts[classKey][subject][day] || 0) >= deficitInfo.maxPerDay) {
               continue; // Skip - already at max for this day
@@ -853,8 +868,8 @@ Roster.ensureMinimumSubjectRequirements = function(
         const maxMoreOnThisDay = deficitInfo.maxPerDay - currentDayCount;
         
         if (maxMoreOnThisDay <= 0) continue; // Skip this day if already at max
-        
-        // Check each period
+          
+          // Check each period
         for (let col = 2; col < rosterData[rowIndex].length && filledCount < deficit; col++) {
           // Skip if already filled maxPerDay for this subject on this day
           if (filledCount >= maxMoreOnThisDay) break;
@@ -1083,6 +1098,205 @@ Roster.ensureMinimumSubjectRequirements = function(
   
   console.log(`Final optimization results: Made ${totalChanges} changes, reduced deficits from ${totalDeficits} to ${finalDeficits}`);
   
+  // PHASE 4: Completeness Phase - Fill any remaining empty slots, prioritizing subjects below minimum requirements
+  console.log("Starting completeness phase to fill empty slots...");
+  
+  // Track subjects that are consistently difficult to assign
+  const difficultSubjects = new Set();
+  
+  // Process all classes to find and fill empty slots
+  classes.forEach(classInfo => {
+    const classKey = classKeyMap[classInfo.standard + classInfo.section];
+    
+    // Get the standard name, handling complex formats like "XII-Science"
+    const classKeyComponents = classKey.split('-');
+    let standardName;
+    
+    if (classKeyComponents.length === 2) {
+      standardName = classKeyComponents[0];
+    } else if (classKeyComponents.length === 3) {
+      standardName = classKeyComponents[0] + '-' + classKeyComponents[1];
+    } else {
+      standardName = classKeyComponents[0];
+    }
+    
+    // Get subject requirements for this standard
+    const subjects = subjectPeriods[standardName] || {};
+    
+    // Get deficit subjects first
+    const deficitSubjects = {};
+    
+    Object.keys(subjects).forEach(subject => {
+      const currentCount = classSubjectCounts[classKey][subject] || 0;
+      const minRequired = subjects[subject].minPerWeek;
+      
+      if (currentCount < minRequired) {
+        deficitSubjects[subject] = {
+          deficit: minRequired - currentCount,
+          minPerWeek: minRequired,
+          maxPerDay: subjects[subject].maxPerDay,
+          priority: (minRequired - currentCount) * (minRequired / 5)  // Adjusted priority formula
+        };
+      }
+    });
+    
+    // Sort subjects by deficit priority
+    const prioritizedSubjects = Object.entries(deficitSubjects)
+      .sort((a, b) => b[1].priority - a[1].priority)
+      .map(entry => entry[0]);
+    
+    // Add all other subjects with lower priority
+    const otherSubjects = Object.keys(subjects).filter(subject => !prioritizedSubjects.includes(subject));
+    const allSubjectsByPriority = [...prioritizedSubjects, ...otherSubjects];
+    
+    // Check each day for empty slots
+    days.forEach(day => {
+      const rowIndex = classRowIndices[classKey]?.[day];
+      if (rowIndex === undefined) return;
+      
+      // Look for empty slots
+      for (let col = 2; col < rosterData[rowIndex].length; col++) {
+            // Skip break and lunch
+            if (col === breakColumn - 1 || col === lunchColumn - 1) continue;
+            
+        // If slot is empty, try to fill it
+            if (!rosterData[rowIndex][col]) {
+          let assigned = false;
+          
+          // Try prioritized subjects first (those below minimum requirements)
+          for (const subject of allSubjectsByPriority) {
+            // Skip if this subject is already at max per day
+            const currentDayCount = subjectDayCounts[classKey][subject][day] || 0;
+            const maxPerDay = subjects[subject].maxPerDay;
+            
+            if (currentDayCount >= maxPerDay) continue;
+            
+            // Skip if this subject is already at max per week
+            const currentWeekCount = classSubjectCounts[classKey][subject] || 0;
+            const maxPerWeek = subjects[subject].maxPerWeek;
+            
+            if (currentWeekCount >= maxPerWeek) continue;
+            
+            // Find teachers who can teach this subject
+            const subjectConfig = {
+              maxPerDay: maxPerDay
+            };
+            
+            if (tryAssignTeacher(rowIndex, col, day, classInfo, classKey, subject, subjectConfig)) {
+              console.log(`Filled empty slot for ${classKey} on ${day} period ${col-1} with ${subject}`);
+              assigned = true;
+              totalChanges++;
+              break;
+            }
+          }
+          
+          // If still not assigned, track as difficult case
+          if (!assigned) {
+            const emptySlotInfo = `${classKey}-${day}-${col-1}`;
+            console.log(`Could not fill empty slot: ${emptySlotInfo}. No available teachers found.`);
+            
+            // Try subjects that are consistently difficult to assign (like PE, Art) with relaxed teacher constraints
+            const specialSubjects = ['Phy Ed', 'Art'];
+            
+            for (const subject of specialSubjects) {
+              if (!subjects[subject]) continue; // Skip if subject not applicable for this standard
+              
+              // Skip if this subject is already at max per day
+              const currentDayCount = subjectDayCounts[classKey][subject][day] || 0;
+              const maxPerDay = subjects[subject].maxPerDay;
+              
+              if (currentDayCount >= maxPerDay) continue;
+              
+              // For these special subjects, try to find any teacher who can teach it
+              const subjectTeachers = teachersBySubject[subject] || [];
+              
+              for (const teacher of subjectTeachers) {
+                // Skip if teacher already assigned in this period
+                if (teacherAssignments[day][col][teacher.name]) continue;
+                
+                // For these special cases, relax the constraint on standard capabilities
+                // This is a last resort to fill empty slots with important subjects
+                
+                // Assign the teacher
+                rosterData[rowIndex][col] = `${subject}\n(${teacher.name})`;
+                teacherAssignments[day][col][teacher.name] = classKey;
+                teacherAssignmentCounts[teacher.name]++;
+                
+                if (!classSubjectCounts[classKey][subject]) {
+                  classSubjectCounts[classKey][subject] = 0;
+                }
+                classSubjectCounts[classKey][subject]++;
+                
+                if (!subjectDayCounts[classKey][subject][day]) {
+                  subjectDayCounts[classKey][subject][day] = 0;
+                }
+                subjectDayCounts[classKey][subject][day]++;
+                
+                // Update teacher tracking
+                classTeacherMap[classKey][teacher.name] = true;
+                
+                // Update subject-teacher mapping
+                if (!classSubjectTeacherMap[classKey][subject][teacher.name]) {
+                  classSubjectTeacherMap[classKey][subject][teacher.name] = 0;
+                }
+                classSubjectTeacherMap[classKey][subject][teacher.name]++;
+                
+                console.log(`Filled difficult slot for ${classKey} on ${day} period ${col-1} with ${subject} using special handling`);
+                assigned = true;
+                totalChanges++;
+                break;
+              }
+              
+              if (assigned) break;
+            }
+            
+            // If still not assigned after special handling, add to difficult subjects
+            if (!assigned) {
+              difficultSubjects.add(emptySlotInfo);
+            }
+          }
+        }
+      }
+    });
+  });
+  
+  // Log any slots that couldn't be filled
+  if (difficultSubjects.size > 0) {
+    console.log(`${difficultSubjects.size} slots could not be filled after all optimization phases`);
+  }
+  
+  // Calculate final deficits after completeness phase
+  let finalDeficitsAfterCompletion = 0;
+  classes.forEach(classInfo => {
+    const classKey = classKeyMap[classInfo.standard + classInfo.section];
+    
+    // Get the standard name, handling complex formats
+    const classKeyComponents = classKey.split('-');
+    let standardName;
+    
+    if (classKeyComponents.length === 2) {
+      standardName = classKeyComponents[0];
+    } else if (classKeyComponents.length === 3) {
+      standardName = classKeyComponents[0] + '-' + classKeyComponents[1];
+    } else {
+      standardName = classKeyComponents[0];
+    }
+    
+    // Check each subject against its requirements
+    const subjects = subjectPeriods[standardName] || {};
+    
+    Object.keys(subjects).forEach(subject => {
+      const currentCount = classSubjectCounts[classKey][subject] || 0;
+      const minRequired = subjects[subject].minPerWeek;
+      
+      if (currentCount < minRequired) {
+        finalDeficitsAfterCompletion += (minRequired - currentCount);
+      }
+    });
+  });
+  
+  console.log(`After completeness phase: ${finalDeficitsAfterCompletion} total period deficits remain`);
+  
   // Helper function to try to assign a teacher for a subject in a specific slot
   function tryAssignTeacher(rowIndex, col, day, classInfo, classKey, subject, subjectConfig) {
     // Check if assigning this subject would exceed maxPerDay
@@ -1095,141 +1309,141 @@ Roster.ensureMinimumSubjectRequirements = function(
     const subjectTeachers = teachersBySubject[subject] || [];
     
     // Check if there's an adjacent period with the same subject - try to use the same teacher
-    let adjacentTeacher = null;
-    
-    // Check previous period
-    if (col > 2 && rosterData[rowIndex][col-1] && !['BREAK', 'LUNCH'].includes(rosterData[rowIndex][col-1])) {
-      const prevCellContent = rosterData[rowIndex][col-1];
-      const matches = prevCellContent.match(/^(.+)\n\((.+)\)$/);
-      if (matches && matches.length === 3 && matches[1].trim() === subject) {
-        adjacentTeacher = matches[2].trim();
-      }
-    }
-    
-    // Check next period
-    if (!adjacentTeacher && col < rosterData[rowIndex].length - 1 && 
-        rosterData[rowIndex][col+1] && !['BREAK', 'LUNCH'].includes(rosterData[rowIndex][col+1])) {
-      const nextCellContent = rosterData[rowIndex][col+1];
-      const matches = nextCellContent.match(/^(.+)\n\((.+)\)$/);
-      if (matches && matches.length === 3 && matches[1].trim() === subject) {
-        adjacentTeacher = matches[2].trim();
-      }
-    }
-    
-    // If we found an adjacent teacher, try to assign them first
-    if (adjacentTeacher && !teacherAssignments[day][col][adjacentTeacher]) {
-      // Check if this teacher can teach this subject and standard
+              let adjacentTeacher = null;
+              
+              // Check previous period
+              if (col > 2 && rosterData[rowIndex][col-1] && !['BREAK', 'LUNCH'].includes(rosterData[rowIndex][col-1])) {
+                const prevCellContent = rosterData[rowIndex][col-1];
+                const matches = prevCellContent.match(/^(.+)\n\((.+)\)$/);
+                if (matches && matches.length === 3 && matches[1].trim() === subject) {
+                  adjacentTeacher = matches[2].trim();
+                }
+              }
+              
+              // Check next period
+              if (!adjacentTeacher && col < rosterData[rowIndex].length - 1 && 
+                  rosterData[rowIndex][col+1] && !['BREAK', 'LUNCH'].includes(rosterData[rowIndex][col+1])) {
+                const nextCellContent = rosterData[rowIndex][col+1];
+                const matches = nextCellContent.match(/^(.+)\n\((.+)\)$/);
+                if (matches && matches.length === 3 && matches[1].trim() === subject) {
+                  adjacentTeacher = matches[2].trim();
+                }
+              }
+              
+              // If we found an adjacent teacher, try to assign them first
+              if (adjacentTeacher && !teacherAssignments[day][col][adjacentTeacher]) {
+                // Check if this teacher can teach this subject and standard
       const teacherObj = subjectTeachers.find(t => t.name === adjacentTeacher);
-      
-      if (teacherObj && teacherStandardMap[adjacentTeacher][classInfo.standard] === true) {
-        // Assign the same teacher for continuity
-        rosterData[rowIndex][col] = `${subject}\n(${adjacentTeacher})`;
-        teacherAssignments[day][col][adjacentTeacher] = classKey;
-        teacherAssignmentCounts[adjacentTeacher]++;
-        classSubjectCounts[classKey][subject]++;
+                
+                if (teacherObj && teacherStandardMap[adjacentTeacher][classInfo.standard] === true) {
+                  // Assign the same teacher for continuity
+                  rosterData[rowIndex][col] = `${subject}\n(${adjacentTeacher})`;
+                  teacherAssignments[day][col][adjacentTeacher] = classKey;
+                  teacherAssignmentCounts[adjacentTeacher]++;
+                  classSubjectCounts[classKey][subject]++;
         subjectDayCounts[classKey][subject][day]++;
-        
-        // Update teacher tracking
-        classTeacherMap[classKey][adjacentTeacher] = true;
-        
-        // Update subject-teacher mapping
-        if (!classSubjectTeacherMap[classKey][subject][adjacentTeacher]) {
-          classSubjectTeacherMap[classKey][subject][adjacentTeacher] = 0;
-        }
-        classSubjectTeacherMap[classKey][subject][adjacentTeacher]++;
-        
+                  
+                  // Update teacher tracking
+                  classTeacherMap[classKey][adjacentTeacher] = true;
+                  
+                  // Update subject-teacher mapping
+                  if (!classSubjectTeacherMap[classKey][subject][adjacentTeacher]) {
+                    classSubjectTeacherMap[classKey][subject][adjacentTeacher] = 0;
+                  }
+                  classSubjectTeacherMap[classKey][subject][adjacentTeacher]++;
+                  
         return true;
-      }
-    }
-    
-    // Get the teacher count for this class
-    const teacherCount = Object.keys(classTeacherMap[classKey]).length;
-    
-    // Organize teachers into different groups based on constraints
-    const existingClassTeachers = []; // Teachers already assigned to this class
-    const existingSubjectTeachers = []; // Teachers already teaching this subject to this class
-    const newTeachers = []; // Teachers not yet assigned to this class
-    
-    for (let i = 0; i < subjectTeachers.length; i++) {
-      const teacher = subjectTeachers[i];
-      
+                }
+              }
+              
+              // Get the teacher count for this class
+              const teacherCount = Object.keys(classTeacherMap[classKey]).length;
+              
+              // Organize teachers into different groups based on constraints
+              const existingClassTeachers = []; // Teachers already assigned to this class
+              const existingSubjectTeachers = []; // Teachers already teaching this subject to this class
+              const newTeachers = []; // Teachers not yet assigned to this class
+              
+              for (let i = 0; i < subjectTeachers.length; i++) {
+                const teacher = subjectTeachers[i];
+                
       // Check if teacher can teach this standard and isn't already assigned this period
       // CORRECTED: We only need to check if the teacher is free for this specific period
-      if (teacherStandardMap[teacher.name][classInfo.standard] === true && 
-          !teacherAssignments[day][col][teacher.name]) {
-        
+                if (teacherStandardMap[teacher.name][classInfo.standard] === true && 
+                    !teacherAssignments[day][col][teacher.name]) {
+                  
         // CORRECTED: Remove day-level conflict check, as we only care about this specific period
         
         // For constraint #1: Check if teacher is already assigned to this class
-        if (classTeacherMap[classKey][teacher.name]) {
-          // Further prioritize teachers already teaching this subject to this class
-          if (classSubjectTeacherMap[classKey][subject][teacher.name]) {
-            existingSubjectTeachers.push({
-              teacher: teacher,
-              assignments: teacherAssignmentCounts[teacher.name],
-              subjectAssignments: classSubjectTeacherMap[classKey][subject][teacher.name]
-            });
-          } else {
-            existingClassTeachers.push({
-              teacher: teacher,
-              assignments: teacherAssignmentCounts[teacher.name]
-            });
-          }
-        } else if (teacherCount < MAX_TEACHERS_PER_CLASS || Object.keys(classTeacherMap[classKey]).length === 0) {
-          // Add new teacher only if we haven't reached the maximum or if no teachers assigned yet
-          newTeachers.push({
-            teacher: teacher,
-            assignments: teacherAssignmentCounts[teacher.name]
-          });
-        }
-      }
-    }
-    
-    // Try to assign teachers in order of priority
-    let availableTeachers = [];
-    
-    // First try teachers already teaching this subject to this class
-    if (existingSubjectTeachers.length > 0) {
-      existingSubjectTeachers.sort((a, b) => a.subjectAssignments - b.subjectAssignments);
-      availableTeachers = existingSubjectTeachers;
-    } 
-    // Then try teachers already assigned to this class for other subjects
-    else if (existingClassTeachers.length > 0) {
-      existingClassTeachers.sort((a, b) => a.assignments - b.assignments);
-      availableTeachers = existingClassTeachers;
-    } 
-    // Finally try new teachers if we haven't reached the limit
-    else if (newTeachers.length > 0) {
-      newTeachers.sort((a, b) => a.assignments - b.assignments);
-      availableTeachers = newTeachers;
-    }
-    
-    // If we have available teachers, assign one
-    if (availableTeachers.length > 0) {
-      const teacherData = availableTeachers[0];
-      const teacher = teacherData.teacher;
-      
-      // Assign the teacher
-      rosterData[rowIndex][col] = `${subject}\n(${teacher.name})`;
-      teacherAssignments[day][col][teacher.name] = classKey;
-      teacherAssignmentCounts[teacher.name]++;
-      classSubjectCounts[classKey][subject]++;
+                  if (classTeacherMap[classKey][teacher.name]) {
+                    // Further prioritize teachers already teaching this subject to this class
+                    if (classSubjectTeacherMap[classKey][subject][teacher.name]) {
+                      existingSubjectTeachers.push({
+                        teacher: teacher,
+                        assignments: teacherAssignmentCounts[teacher.name],
+                        subjectAssignments: classSubjectTeacherMap[classKey][subject][teacher.name]
+                      });
+                    } else {
+                      existingClassTeachers.push({
+                        teacher: teacher,
+                        assignments: teacherAssignmentCounts[teacher.name]
+                      });
+                    }
+                  } else if (teacherCount < MAX_TEACHERS_PER_CLASS || Object.keys(classTeacherMap[classKey]).length === 0) {
+                    // Add new teacher only if we haven't reached the maximum or if no teachers assigned yet
+                    newTeachers.push({
+                      teacher: teacher,
+                      assignments: teacherAssignmentCounts[teacher.name]
+                    });
+                  }
+                }
+              }
+              
+              // Try to assign teachers in order of priority
+              let availableTeachers = [];
+              
+              // First try teachers already teaching this subject to this class
+              if (existingSubjectTeachers.length > 0) {
+                existingSubjectTeachers.sort((a, b) => a.subjectAssignments - b.subjectAssignments);
+                availableTeachers = existingSubjectTeachers;
+              } 
+              // Then try teachers already assigned to this class for other subjects
+              else if (existingClassTeachers.length > 0) {
+                existingClassTeachers.sort((a, b) => a.assignments - b.assignments);
+                availableTeachers = existingClassTeachers;
+              } 
+              // Finally try new teachers if we haven't reached the limit
+              else if (newTeachers.length > 0) {
+                newTeachers.sort((a, b) => a.assignments - b.assignments);
+                availableTeachers = newTeachers;
+              }
+              
+              // If we have available teachers, assign one
+              if (availableTeachers.length > 0) {
+                const teacherData = availableTeachers[0];
+                const teacher = teacherData.teacher;
+                
+                // Assign the teacher
+                rosterData[rowIndex][col] = `${subject}\n(${teacher.name})`;
+                teacherAssignments[day][col][teacher.name] = classKey;
+                teacherAssignmentCounts[teacher.name]++;
+                classSubjectCounts[classKey][subject]++;
       subjectDayCounts[classKey][subject][day]++;
-      
-      // Update teacher tracking
-      classTeacherMap[classKey][teacher.name] = true;
-      
-      // Update subject-teacher mapping
-      if (!classSubjectTeacherMap[classKey][subject][teacher.name]) {
-        classSubjectTeacherMap[classKey][subject][teacher.name] = 0;
-      }
-      classSubjectTeacherMap[classKey][subject][teacher.name]++;
-      
+                
+                // Update teacher tracking
+                classTeacherMap[classKey][teacher.name] = true;
+                
+                // Update subject-teacher mapping
+                if (!classSubjectTeacherMap[classKey][subject][teacher.name]) {
+                  classSubjectTeacherMap[classKey][subject][teacher.name] = 0;
+                }
+                classSubjectTeacherMap[classKey][subject][teacher.name]++;
+                
       return true;
-    }
+              }
     
     return false;
-  }
+            }
 };
 
 /**

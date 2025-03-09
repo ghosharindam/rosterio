@@ -23,6 +23,7 @@ UI.createMenu = function(ui) {
     .addSeparator()
     .addItem('Validate Schedule Feasibility', 'validateSchedule')
     .addItem('Generate Roster', 'generateRoster')
+    .addItem('Iterate Roster', 'iterateRoster')
     .addSeparator()
     .addItem('Clear All Data', 'clearAllData')
     .addToUi();

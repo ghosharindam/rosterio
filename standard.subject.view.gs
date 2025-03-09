@@ -69,6 +69,8 @@ StandardSubjectView.generate = function() {
   sheet.getRange(1, subjects.length + 2).setValue('Total Periods');
 
   // Populate data with min requirements in brackets and highlight issues
+  let redCellCount = 0;
+  let yellowCellCount = 0;
   Array.from(classes).forEach((classKey, rowIndex) => {
     // Extract standard from classKey (format is "Standard-Section" or "Standard-Type-Section")
     // Handle cases like "XII-Science-A" where standard is "XII-Science"
@@ -99,15 +101,18 @@ StandardSubjectView.generate = function() {
       // Get actual count of periods assigned
       const count = subjectCounts[classKey] && subjectCounts[classKey][subject] ? subjectCounts[classKey][subject] : 0;
       
-      // Get minimum required from subject-periods data
+      // Get minimum and maximum required from subject-periods data
       let minRequired = 0;
+      let maxAllowed = 0;
+      
       if (subjectPeriods[standard] && subjectPeriods[standard][subject]) {
         minRequired = subjectPeriods[standard][subject].minPerWeek;
+        maxAllowed = subjectPeriods[standard][subject].maxPerWeek;
         
         // Log for debugging specific subjects for science streams
         if ((classKey.startsWith('XII-Science') || classKey.startsWith('XI-Science')) && 
             (subject === 'Eng' || subject === 'Physics' || subject === 'Chemistry')) {
-          console.log(`${classKey} - ${subject}: minRequired = ${minRequired}, found in subjectPeriods[${standard}][${subject}]`);
+          console.log(`${classKey} - ${subject}: minRequired = ${minRequired}, maxAllowed = ${maxAllowed}, found in subjectPeriods[${standard}][${subject}]`);
         }
       } else {
         // Log missing subject requirements
@@ -117,13 +122,19 @@ StandardSubjectView.generate = function() {
         }
       }
       
-      // Set cell value with min requirement in brackets
+      // Set cell value with min and max requirements in brackets
       const cell = sheet.getRange(rowIndex + 2, colIndex + 2);
-      cell.setValue(`${count} (${minRequired})`);
+      cell.setValue(`${count} (${minRequired}, ${maxAllowed})`);
       
       // Highlight cell in red if count is less than minimum
       if (count < minRequired) {
         cell.setBackground('#f4cccc'); // Light red
+        redCellCount++; // Increment red cell counter
+      } 
+      // Highlight cell in yellow if count is more than maximum
+      else if (maxAllowed > 0 && count > maxAllowed) {
+        cell.setBackground('#fff2cc'); // Light yellow
+        yellowCellCount++; // Increment yellow cell counter
       }
       
       totalPeriods += count;
@@ -141,10 +152,25 @@ StandardSubjectView.generate = function() {
   sheet.getRange(lastRow, 1).setValue('Legend:');
   sheet.getRange(lastRow, 1).setFontWeight('bold');
   
-  sheet.getRange(lastRow + 1, 1, 1, 2).merge();
-  sheet.getRange(lastRow + 1, 1).setValue('# (min): Actual periods (Minimum required)');
+  // Format header row
+  sheet.getRange(lastRow + 1, 1).setValue('Format:');
+  sheet.getRange(lastRow + 1, 2, 1, 3).merge();
+  sheet.getRange(lastRow + 1, 2).setValue('# (min, max): Actual periods (Minimum required, Maximum allowed)');
   
-  sheet.getRange(lastRow + 2, 1, 1, 2).merge();
-  sheet.getRange(lastRow + 2, 1).setValue('Red highlight: Actual periods less than minimum required');
+  // Format red highlight row - split description and count
+  sheet.getRange(lastRow + 2, 1).setValue('Red highlight:');
   sheet.getRange(lastRow + 2, 1).setBackground('#f4cccc');
+  sheet.getRange(lastRow + 2, 2).setValue('Actual periods less than minimum required');
+  sheet.getRange(lastRow + 2, 3).setValue(redCellCount);
+  sheet.getRange(lastRow + 2, 4).setValue('cells');
+  
+  // Format yellow highlight row - split description and count
+  sheet.getRange(lastRow + 3, 1).setValue('Yellow highlight:');
+  sheet.getRange(lastRow + 3, 1).setBackground('#fff2cc');
+  sheet.getRange(lastRow + 3, 2).setValue('Actual periods more than maximum allowed');
+  sheet.getRange(lastRow + 3, 3).setValue(yellowCellCount);
+  sheet.getRange(lastRow + 3, 4).setValue('cells');
+  
+  // Auto-resize all columns to fit content
+  sheet.autoResizeColumns(1, subjects.length + 4);
 };
