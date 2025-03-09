@@ -104,6 +104,19 @@ Init.populateClassConfigData = function(spreadsheet) {
   
   // Create sample class configuration data
   const data = [
+    ['VI','A'],
+    ['VI','B'],
+    ['VI','C'],
+    ['VI','D'],
+    ['VI','E'],
+    ['VII','A'],
+    ['VII','B'],
+    ['VII','C'],
+    ['VII','D'],
+    ['VIII','A'],
+    ['VIII','B'],
+    ['VIII','C'],
+    ['VIII','D'],
     ['IX','A'],
     ['IX','B'],
     ['IX','C'],
