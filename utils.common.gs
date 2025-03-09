@@ -62,6 +62,12 @@ Utils.clearAllData = function() {
     }
   });
   
+  // Also delete the Teacher-View sheet if it exists
+  const teacherViewSheet = spreadsheet.getSheetByName('Teacher-View');
+  if (teacherViewSheet) {
+    spreadsheet.deleteSheet(teacherViewSheet);
+  }
+  
   // Remove any other sheets that might have been generated
   const generatedRosterPattern = /^Generated-Roster/;
   spreadsheet.getSheets().forEach(sheet => {

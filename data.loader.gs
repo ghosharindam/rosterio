@@ -11,20 +11,24 @@ var Data = Data || {};
 Data.getPeriodCount = function() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   const configSheet = spreadsheet.getSheetByName(SHEET_NAMES.PERIODS_CONFIG);
-  
+  var periodCount = 8; // Default to 8 periods if not specified
+
   // If config sheet exists, get the number of periods from it
   if (configSheet) {
     // Find the periods configuration row
     const configData = configSheet.getDataRange().getValues();
     for (let i = 0; i < configData.length; i++) {
-      if (configData[i][0] === 'Number of Periods') {
-        return parseInt(configData[i][1]);
+      if (configData[i][0] === 'Periods per day') {
+        periodCount = parseInt(configData[i][1]);
       }
     }
   }
+
+  // Add 2 to the period count for the breaks
+  periodCount += 2;
   
   // Fallback to a default number of periods if not found in config
-  return 8; // Default to 8 periods if not specified
+  return periodCount; 
 };
 
 /**

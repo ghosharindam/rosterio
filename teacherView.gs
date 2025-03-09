@@ -82,7 +82,7 @@ function getPeriodCount() {
   return 8; // Default to 8 periods if not specified
 }
 
-// Create trigger for teacher view changes
+// Create trigger for teacher-view changes
 function createTeacherViewTrigger() {
   const ss = SpreadsheetApp.getActive();
   ScriptApp.newTrigger('onTeacherViewEdit')
