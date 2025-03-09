@@ -77,7 +77,7 @@ Init.populateTeacherSubjectData = function(spreadsheet) {
     ['SRB','Math/Commerce','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','Yes','Yes'],
     ['SPM','Biology','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No'],
     ['SKD','Science','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No'],
-    ['UPG','Math/Commerce','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','Yes','Yes']
+    ['UPG','Math/Commerce','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','Yes','Yes'],
     ['KTP-MNS','Beng-Hindi','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No'],
     ['SMD-PTS','Beng-Hindi','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No'],
     ['SRD-PRD','Beng-Hindi','No','No','No','No','No','Yes','Yes','Yes','Yes','Yes','No','No'],
